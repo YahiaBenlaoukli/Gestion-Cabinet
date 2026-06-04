@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { Patient, BloodType } from "../../../types/patient"
+import { useNavigate } from "react-router-dom"
 
 /* ─── Inline SVG icons ─── */
 const icons = {
@@ -133,6 +134,8 @@ export default function Patients() {
     const [filterBloodType, setFilterBloodType] = useState<string>('')
     const [showFilterMenu, setShowFilterMenu] = useState(false)
 
+    const navigate = useNavigate()
+
     /* ── CRUD ops ── */
     const getAllPatients = async () => {
         try {
@@ -238,6 +241,10 @@ export default function Patients() {
             {sortField === field && sortDir === 'desc' ? '↓' : '↑'}
         </span>
     )
+
+    const handleRowClick = (id: number) => {
+        navigate(`/patients/${id}`)
+    }
 
     /* ═══════════════════════════════ RENDER ═══════════════════════════════ */
     return (
@@ -406,7 +413,7 @@ export default function Patients() {
                                 paginated.map((patient, idx) => {
                                     const isSelected = selectedIds.has(patient.id)
                                     return (
-                                        <tr
+                                        <tr onClick={() => handleRowClick(patient.id)}
                                             key={patient.id}
                                             className={`
                         group border-b border-navy/[0.03] transition-colors duration-150 cursor-pointer
