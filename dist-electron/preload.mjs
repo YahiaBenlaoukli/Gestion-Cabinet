@@ -24,6 +24,10 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   deletePatient: (id) => electron.ipcRenderer.invoke("delete-patient", id),
   getPatientById: (id) => electron.ipcRenderer.invoke("get-patient-by-id", id),
   searchPatient: (query) => electron.ipcRenderer.invoke("search-patient", query),
-  countPatients: () => electron.ipcRenderer.invoke("count-patients")
+  countPatients: () => electron.ipcRenderer.invoke("count-patients"),
   //gestion documents
+  uploadDocument: (document) => electron.ipcRenderer.invoke("upload-document", document),
+  getDocumentsByPatientId: (patientId) => electron.ipcRenderer.invoke("get-documents-by-patient-id", patientId),
+  deleteDocument: (id) => electron.ipcRenderer.invoke("delete-document", id),
+  openDocument: (path) => electron.ipcRenderer.invoke("open-document", path)
 });

@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 
   //gestion documents
+  uploadDocument: (document: Omit<PatientDocument, 'id' | 'uploadDate'>) => ipcRenderer.invoke('upload-document', document),
+  getDocumentsByPatientId: (patientId: number) => ipcRenderer.invoke('get-documents-by-patient-id', patientId),
+  deleteDocument: (id: number) => ipcRenderer.invoke('delete-document', id),
+  openDocument: (path: string) => ipcRenderer.invoke('open-document', path),
 
 
 })

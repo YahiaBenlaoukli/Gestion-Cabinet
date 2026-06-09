@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { initializeDatabase } from './db/db'
 import { addPatient, getPatient, getAllPatients, updatePatient, deletePatient, searchPatients, countPatients } from './services/patient'
+import { uploadDocument, getDocumentsByPatientId, deleteDocument, openDocument } from './services/documents'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -68,11 +69,16 @@ app.on('activate', () => {
 app.whenReady().then(() => {
   initializeDatabase();
   ipcMain.handle('add-patient', async (_event, patient) => await addPatient(patient));
-  ipcMain.handle('get-patient', async (_event, id) => await getPatient(id));
+  ipcMain.handle('get-patient-by-id', async (_event, id) => await getPatient(id));
   ipcMain.handle('get-all-patients', async () => await getAllPatients());
   ipcMain.handle('update-patient', async (_event, patient) => await updatePatient(patient));
   ipcMain.handle('delete-patient', async (_event, id) => await deletePatient(id));
   ipcMain.handle('search-patients', async (_event, query) => await searchPatients(query));
   ipcMain.handle('count-patients', async () => await countPatients());
+  //gestion des documents
+  ipcMain.handle('get-documents-by-patient-id', async (_event, patientId) => getDocumentsByPatientId(patientId));
+  ipcMain.handle('upload-document', async (_event, document) => await uploadDocument(document));
+  ipcMain.handle('delete-document', async (_event, id) => deleteDocument(id));
+  ipcMain.handle('open-document', async (_event, path) => await openDocument(path));
   createWindow();
 })

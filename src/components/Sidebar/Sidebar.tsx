@@ -60,7 +60,7 @@ const icons = {
     </svg>
   ),
   chevronLeft: (
-    <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="15 18 9 12 15 6" />
     </svg>
   ),
@@ -78,12 +78,19 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Tableau de bord', icon: icons.dashboard, path: '/', section: 'main' },
-  { id: 'patients', label: 'Patients', icon: icons.patients, path: '/patients', section: 'main', badge: 12 },
-  { id: 'appointments', label: 'Rendez-vous', icon: icons.calendar, path: '/appointments', section: 'main', badge: 3 },
+  { id: 'patients', label: 'Patients', icon: icons.patients, path: '/patients', section: 'main' },
+  { id: 'appointments', label: 'Rendez-vous', icon: icons.calendar, path: '/appointments', section: 'main' },
   { id: 'documents', label: 'Documents', icon: icons.documents, path: '/documents', section: 'manage' },
   { id: 'prescriptions', label: 'Ordonnances', icon: icons.prescription, path: '/prescriptions', section: 'manage' },
   { id: 'statistics', label: 'Statistiques', icon: icons.stats, path: '/statistics', section: 'manage' },
   { id: 'settings', label: 'Paramètres', icon: icons.settings, path: '/settings', section: 'system' },
+]
+
+/* ─── Language options ─── */
+const languages = [
+  { code: 'fr', label: 'FR' },
+  { code: 'en', label: 'EN' },
+  { code: 'ar', label: 'عر' },
 ]
 
 /* ─── NavItem Component ─── */
@@ -181,23 +188,37 @@ export default function Sidebar() {
         ${collapsed ? 'w-[62px]' : 'w-[250px]'}
       `}
     >
-      {/* ── Header / Logo ── */}
-      <div className={`flex items-center gap-3 border-b border-white/[0.07] flex-shrink-0 ${collapsed ? 'px-3 py-5 justify-center' : 'px-5 py-5'}`}>
-        <div className="flex items-center justify-center flex-shrink-0 hover:scale-105 transition-transform duration-200">
-          <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain" />
-        </div>
-        {!collapsed && (
-          <div className="flex flex-col overflow-hidden whitespace-nowrap">
-            <div className="inline-flex">
-              <span className="text-[1.4rem] tracking-tight text-white">
-                Ausc
-              </span>
-              <span className="text-[1.4rem] tracking-tight text-pink">
-                ulta
-              </span>
-            </div>
+      {/* ── Header / Logo + Collapse Arrow ── */}
+      <div className={`flex border-b border-white/[0.07] flex-shrink-0 ${collapsed ? 'flex-col items-center px-3 py-4 gap-3' : 'flex-row items-center px-5 py-5 justify-between'}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center flex-shrink-0 hover:scale-105 transition-transform duration-200">
+            <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain" />
           </div>
-        )}
+          {!collapsed && (
+            <div className="flex flex-col overflow-hidden whitespace-nowrap">
+              <div className="inline-flex">
+                <span className="text-[1.4rem] tracking-tight text-white">
+                  Ausc
+                </span>
+                <span className="text-[1.4rem] tracking-tight text-pink">
+                  ulta
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Collapse/Expand toggle arrow */}
+        <button
+          id="sidebar-toggle"
+          onClick={() => setCollapsed(c => !c)}
+          aria-label={collapsed ? t('sidebar.actions.expand') : t('sidebar.actions.collapse')}
+          className="flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all duration-200 cursor-pointer w-7 h-7 flex-shrink-0"
+        >
+          <span className={`transition-transform duration-300 ${collapsed ? (isRtl ? '' : 'rotate-180') : (isRtl ? 'rotate-180' : '')}`}>
+            {icons.chevronLeft}
+          </span>
+        </button>
       </div>
 
       {/* ── Navigation Items ── */}
@@ -228,24 +249,24 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* ── Footer ── */}
+      {/* ── Footer: Language Selector Only ── */}
       <div className={`border-t border-white/[0.07] flex-shrink-0 ${collapsed ? 'px-2 py-4' : 'px-3 py-4'}`}>
-        {/* Language selector */}
+        {/* Language selector — native select */}
         {!collapsed ? (
-          <div className="flex items-center justify-between mb-3 px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-            <span className="text-[11px] text-white/50 font-medium">Langue / اللغة</span>
+          <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.07]">
+            <span className="text-[11px] text-white/40 font-medium">Langue</span>
             <select
               value={activeLang}
               onChange={(e) => i18n.changeLanguage(e.target.value)}
-              className="bg-navy-dark text-white/80 text-xs font-semibold py-1 px-2.5 rounded-lg border border-white/10 focus:outline-none focus:ring-1 focus:ring-pink/50 cursor-pointer"
+              className="bg-transparent text-white/80 text-xs font-semibold focus:outline-none cursor-pointer appearance-none pr-1"
             >
-              <option value="fr">Français</option>
-              <option value="en">English</option>
-              <option value="ar">العربية</option>
+              <option value="fr" className="bg-navy text-white">Français</option>
+              <option value="en" className="bg-navy text-white">English</option>
+              <option value="ar" className="bg-navy text-white">العربية</option>
             </select>
           </div>
         ) : (
-          <div className="relative group flex justify-center mb-3">
+          <div className="relative group flex justify-center">
             <button
               className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               aria-label="Language"
@@ -256,52 +277,25 @@ export default function Sidebar() {
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
               </svg>
             </button>
-            <div className={`absolute bottom-0 ${isRtl ? 'right-full mr-3' : 'left-full ml-3'} bg-navy border border-white/10 rounded-xl shadow-lg py-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150 z-50 min-w-[100px]`}>
-              <button onClick={() => i18n.changeLanguage('fr')} className={`w-full text-left px-3 py-1.5 text-xs text-white hover:bg-white/10 ${activeLang === 'fr' ? 'text-pink font-bold' : ''}`}>Français</button>
-              <button onClick={() => i18n.changeLanguage('en')} className={`w-full text-left px-3 py-1.5 text-xs text-white hover:bg-white/10 ${activeLang === 'en' ? 'text-pink font-bold' : ''}`}>English</button>
-              <button onClick={() => i18n.changeLanguage('ar')} className={`w-full text-left px-3 py-1.5 text-xs text-white hover:bg-white/10 ${activeLang === 'ar' ? 'text-pink font-bold' : ''}`}>العربية</button>
+            <div className={`absolute bottom-0 ${isRtl ? 'right-full mr-3' : 'left-full ml-3'} bg-navy border border-white/10 rounded-xl shadow-lg p-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-150 z-50 flex flex-col gap-0.5 min-w-[110px]`}>
+              {languages.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => i18n.changeLanguage(lang.code)}
+                  className={`
+                    w-full text-left px-3 py-2 text-xs rounded-lg transition-colors cursor-pointer
+                    ${activeLang === lang.code
+                      ? 'bg-pink/15 text-pink font-bold'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }
+                  `}
+                >
+                  {lang.code === 'fr' ? 'Français' : lang.code === 'en' ? 'English' : 'العربية'}
+                </button>
+              ))}
             </div>
           </div>
         )}
-
-        {/* User card */}
-        <div className={`flex items-center rounded-xl bg-white/[0.04] overflow-hidden mb-2.5 ${collapsed ? 'w-11 h-11 justify-center' : 'gap-3 px-3.5 py-2.5'}`}>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-navy-light to-navy flex items-center justify-center flex-shrink-0 text-sm font-bold text-pink-light border-2 border-pink/20">
-            DR
-          </div>
-          {!collapsed && (
-            <div className="overflow-hidden whitespace-nowrap">
-              <div className="text-[13px] font-semibold text-white leading-tight">Dr. Martin</div>
-              <div className="text-[11px] text-white/35">{t('sidebar.user.role')}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Toggle button */}
-        <button
-          id="sidebar-toggle"
-          onClick={() => setCollapsed(c => !c)}
-          aria-label={collapsed ? t('sidebar.actions.expand') : t('sidebar.actions.collapse')}
-          className={`
-            group relative flex items-center justify-center w-full rounded-xl
-            bg-white/5 text-white/45
-            hover:bg-white/10 hover:text-white/80
-            transition-all duration-200 cursor-pointer
-            ${collapsed ? 'h-11' : 'gap-2.5 px-3.5 py-2.5'}
-          `}
-        >
-          <span className={`flex-shrink-0 transition-transform duration-300 ${collapsed ? (isRtl ? '' : 'rotate-180') : (isRtl ? 'rotate-180' : '')}`}>
-            {icons.chevronLeft}
-          </span>
-          {!collapsed && (
-            <span className="text-[13px] font-medium whitespace-nowrap">{t('sidebar.actions.collapse')}</span>
-          )}
-          {collapsed && (
-            <span className={`pointer-events-none absolute ${isRtl ? 'right-full mr-3' : 'left-full ml-3'} whitespace-nowrap bg-navy text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-[60]`}>
-              {t('sidebar.actions.expand')}
-            </span>
-          )}
-        </button>
       </div>
     </nav>
   )

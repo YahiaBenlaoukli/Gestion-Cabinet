@@ -93,7 +93,46 @@
   },
   "patient_details": {
     "back": "Retour au tableau",
-    "title": "Détails du patient pour l'ID : {{id}}"
+    "title": "Détails du patient pour l'ID : {{id}}",
+    "not_found": "Patient non trouvé",
+    "edit": "Modifier le patient",
+    "active": "Actif",
+    "age": "Âge {{age}}",
+    "blood_type": "Gr. Sanguin: {{value}}",
+    "ssn": "N° Sécu: {{value}}",
+    "added_on": "Ajouté le {{date}}",
+    "last_visit": "Dernière visite il y a 3 jours",
+    "follow_up": "Suivi & Consultations",
+    "add_protocol": "+ Ajouter un protocole de suivi",
+    "status_general": "Général",
+    "status_suspended": "Suspendu",
+    "next_appt": "Prochain rdv: {{value}}",
+    "next_appt_none": "Prochain rdv: Aucun",
+    "tabs": {
+      "activity": "Activité",
+      "documents": "Documents ({{count}})",
+      "notes": "Notes de suivi"
+    },
+    "activity": {
+      "consultation_done": "Consultation générale effectuée",
+      "prescription_generated": "Ordonnance générée: Paracétamol 500mg",
+      "file_scanned": "Dossier médical scanné et ajouté aux documents"
+    },
+    "documents": {
+      "title": "Documents du patient",
+      "upload": "Téléverser",
+      "empty": "Aucun document disponible.",
+      "added_on": "Ajouté le {{date}}",
+      "open": "Ouvrir le document",
+      "delete": "Supprimer le document",
+      "confirm_delete": "Voulez-vous supprimer ce document ?"
+    },
+    "notes": {
+      "title": "Notes & Antécédents",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "placeholder": "Saisissez vos observations médicales, antécédents, allergies ou traitements habituels..."
+    }
   },
   "time": {
     "today": "Aujourd'hui",

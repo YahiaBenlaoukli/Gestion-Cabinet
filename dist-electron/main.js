@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, shell, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import Database from "better-sqlite3";
+import fs from "node:fs";
 let db;
 function initializeDatabase() {
   const dbPath = path.join(app.getPath("userData"), "cabinet-medicale.db");
@@ -145,6 +146,80 @@ async function countPatients() {
     throw error;
   }
 }
+const recordsFolder = path.join(app.getPath("userData"), "records");
+if (!fs.existsSync(recordsFolder)) {
+  fs.mkdirSync(recordsFolder, { recursive: true });
+}
+async function uploadDocument(document) {
+  try {
+    const patientFolder = path.join(recordsFolder, document.patientId.toString());
+    if (!fs.existsSync(patientFolder)) {
+      fs.mkdirSync(patientFolder, { recursive: true });
+    }
+    const filename = path.basename(document.fileName);
+    const uniqueFilename = `${Date.now()}_${filename}`;
+    const localPath = path.join(patientFolder, uniqueFilename);
+    await fs.promises.copyFile(document.localPath, localPath);
+    const db2 = getDatabase();
+    const stmt = db2.prepare(`
+        INSERT INTO patient_documents (patient_id, file_name, file_category, local_path)
+        VALUES (?, ?, ?, ?)
+    `);
+    const result = stmt.run(document.patientId, uniqueFilename, document.fileCategory, localPath);
+    return {
+      ...document,
+      localPath,
+      id: result.lastInsertRowid,
+      uploadDate: (/* @__PURE__ */ new Date()).toISOString(),
+      fileName: uniqueFilename
+    };
+  } catch (error) {
+    console.log(error);
+  }
+}
+function getDocumentsByPatientId(patientId) {
+  try {
+    const db2 = getDatabase();
+    const stmt = db2.prepare(`
+        SELECT * FROM patient_documents WHERE patient_id = ?
+    `);
+    const rows = stmt.all(patientId);
+    return rows.map((row) => ({
+      id: row.id,
+      patientId: row.patient_id,
+      fileName: row.file_name,
+      fileCategory: row.file_category,
+      localPath: row.local_path,
+      uploadDate: row.upload_date
+    }));
+  } catch (error) {
+    console.log(error);
+    return [];
+  }
+}
+function deleteDocument(id) {
+  try {
+    const db2 = getDatabase();
+    const stmt = db2.prepare(`
+        SELECT local_path FROM patient_documents WHERE id = ?
+    `);
+    const result = stmt.get(id);
+    if (result) {
+      fs.unlinkSync(result.local_path);
+    }
+    const stmt2 = db2.prepare(`
+        DELETE FROM patient_documents WHERE id = ?
+    `);
+    stmt2.run(id);
+  } catch (error) {
+    console.log(error);
+  }
+}
+async function openDocument(filePath) {
+  const error = await shell.openPath(filePath);
+  if (error) console.log("Failed to open file:", error);
+  return error;
+}
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
@@ -182,12 +257,16 @@ app.on("activate", () => {
 app.whenReady().then(() => {
   initializeDatabase();
   ipcMain.handle("add-patient", async (_event, patient) => await addPatient(patient));
-  ipcMain.handle("get-patient", async (_event, id) => await getPatient(id));
+  ipcMain.handle("get-patient-by-id", async (_event, id) => await getPatient(id));
   ipcMain.handle("get-all-patients", async () => await getAllPatients());
   ipcMain.handle("update-patient", async (_event, patient) => await updatePatient(patient));
   ipcMain.handle("delete-patient", async (_event, id) => await deletePatient(id));
   ipcMain.handle("search-patients", async (_event, query) => await searchPatients(query));
   ipcMain.handle("count-patients", async () => await countPatients());
+  ipcMain.handle("get-documents-by-patient-id", async (_event, patientId) => getDocumentsByPatientId(patientId));
+  ipcMain.handle("upload-document", async (_event, document) => await uploadDocument(document));
+  ipcMain.handle("delete-document", async (_event, id) => deleteDocument(id));
+  ipcMain.handle("open-document", async (_event, path2) => await openDocument(path2));
   createWindow();
 });
 export {

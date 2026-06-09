@@ -2,7 +2,7 @@ import { getDatabase } from "../db/db";
 import fs from "node:fs";
 import path from "node:path";
 import type { PatientDocument } from "../../types/documents";
-import { app } from "electron";
+import { app, shell } from "electron";
 
 const recordsFolder = path.join(app.getPath('userData'), 'records');
 
@@ -12,7 +12,7 @@ if (!fs.existsSync(recordsFolder)) {
 
 
 
-export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'uploadDate'>): PatientDocument {
+export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'uploadDate'>): Promise<PatientDocument | undefined> {
     try {
         const patientFolder = path.join(recordsFolder, document.patientId.toString());
 
@@ -24,7 +24,7 @@ export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'upl
         const uniqueFilename = `${Date.now()}_${filename}`
         const localPath = path.join(patientFolder, uniqueFilename);
 
-        await fs.copyFileSync(document.localPath, localPath);
+        await fs.promises.copyFile(document.localPath, localPath);
 
         const db = getDatabase();
         const stmt = db.prepare(`
@@ -50,8 +50,15 @@ export function getDocumentsByPatientId(patientId: number): PatientDocument[] {
         const stmt = db.prepare(`
         SELECT * FROM patient_documents WHERE patient_id = ?
     `);
-        const result = stmt.all(patientId);
-        return result as PatientDocument[];
+        const rows = stmt.all(patientId) as { id: number; patient_id: number; file_name: string; file_category: string; local_path: string; upload_date: string }[];
+        return rows.map(row => ({
+            id: row.id,
+            patientId: row.patient_id,
+            fileName: row.file_name,
+            fileCategory: row.file_category,
+            localPath: row.local_path,
+            uploadDate: row.upload_date,
+        }));
     } catch (error) {
         console.log(error);
         return [];
@@ -64,10 +71,10 @@ export function deleteDocument(id: number): void {
         const stmt = db.prepare(`
         SELECT local_path FROM patient_documents WHERE id = ?
     `);
-        const result = stmt.get(id) as { localPath: string, patientId: number };
+        const result = stmt.get(id) as { local_path: string, patient_id: number };
 
         if (result) {
-            fs.unlinkSync(result.localPath);
+            fs.unlinkSync(result.local_path);
         }
 
         const stmt2 = db.prepare(`
@@ -79,3 +86,9 @@ export function deleteDocument(id: number): void {
     }
 }
 
+
+export async function openDocument(filePath: string): Promise<string> {
+    const error = await shell.openPath(filePath);
+    if (error) console.log('Failed to open file:', error);
+    return error; // empty string = success, non-empty = error message
+}

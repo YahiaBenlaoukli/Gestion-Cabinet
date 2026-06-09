@@ -93,7 +93,46 @@
   },
   "patient_details": {
     "back": "Back to Table",
-    "title": "Patient Details for ID: {{id}}"
+    "title": "Patient Details for ID: {{id}}",
+    "not_found": "Patient not found",
+    "edit": "Edit patient",
+    "active": "Active",
+    "age": "Age {{age}}",
+    "blood_type": "Blood Type: {{value}}",
+    "ssn": "SSN: {{value}}",
+    "added_on": "Added on {{date}}",
+    "last_visit": "Last visit 3 days ago",
+    "follow_up": "Follow-up & Consultations",
+    "add_protocol": "+ Add a follow-up protocol",
+    "status_general": "General",
+    "status_suspended": "Suspended",
+    "next_appt": "Next appt: {{value}}",
+    "next_appt_none": "Next appt: None",
+    "tabs": {
+      "activity": "Activity",
+      "documents": "Documents ({{count}})",
+      "notes": "Follow-up Notes"
+    },
+    "activity": {
+      "consultation_done": "General consultation completed",
+      "prescription_generated": "Prescription generated: Paracetamol 500mg",
+      "file_scanned": "Medical file scanned and added to documents"
+    },
+    "documents": {
+      "title": "Patient Documents",
+      "upload": "Upload",
+      "empty": "No documents available.",
+      "added_on": "Added on {{date}}",
+      "open": "Open document",
+      "delete": "Delete document",
+      "confirm_delete": "Do you want to delete this document?"
+    },
+    "notes": {
+      "title": "Notes & Medical History",
+      "save": "Save",
+      "saving": "Saving...",
+      "placeholder": "Enter your medical observations, history, allergies or usual treatments..."
+    }
   },
   "time": {
     "today": "Today",
