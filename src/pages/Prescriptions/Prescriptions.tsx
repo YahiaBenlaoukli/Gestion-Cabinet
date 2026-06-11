@@ -135,6 +135,7 @@ export default function Prescriptions() {
     /* ── Create doctor profile ── */
     const handleCreateProfile = async (form: { fullName: string; speciality: string; phoneNumber: string; address: string }) => {
         try {
+            console.log("creating doctor profile", currentUserId, form.fullName, form.speciality, form.phoneNumber, form.address)
             const result = await window.ipcRenderer.invoke(
                 'create-doctor-profile',
                 currentUserId,
@@ -148,6 +149,8 @@ export default function Prescriptions() {
                 setStep('generate-pdf');
                 setShowProfileModal(false);
                 showSuccess('Profil médecin créé avec succès !');
+            } else {
+                console.error('Failed to create doctor profile:', result);
             }
         } catch (error) {
             console.error('Error creating profile:', error);
@@ -158,8 +161,10 @@ export default function Prescriptions() {
     const handleGeneratePdf = async () => {
         if (!doctorProfile) return;
         try {
+            console.log("generating pdf")
             setIsGeneratingPdf(true);
             const result = await window.ipcRenderer.invoke('set-prescription-pdf', doctorProfile.id, '');
+            console.log("pdf result", result)
             if (result.status === 'success') {
                 setDoctorProfile(prev => prev ? { ...prev, pdfPath: result.data.pdfPath } : null);
                 setStep('prescriptions');
@@ -502,9 +507,26 @@ function CreateProfileModal({
         phoneNumber: '',
         address: '',
     });
+    const [phoneError, setPhoneError] = useState('');
+
+    const validatePhone = (value: string) => {
+        if (value.length > 0 && value.length < 10) {
+            setPhoneError('Le numéro doit contenir 10 chiffres');
+        } else if (value.length === 10 && !/^(05|06|07)/.test(value)) {
+            setPhoneError('Le numéro doit commencer par 05, 06 ou 07');
+        } else {
+            setPhoneError('');
+        }
+    };
+
+    const isPhoneValid = form.phoneNumber.length === 10 && /^(05|06|07)/.test(form.phoneNumber);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isPhoneValid) {
+            setPhoneError('Le numéro doit contenir 10 chiffres et commencer par 05, 06 ou 07');
+            return;
+        }
         onSave(form);
     };
 
@@ -573,11 +595,19 @@ function CreateProfileModal({
                             <label className="block text-xs font-semibold text-navy/50 mb-1.5">Téléphone</label>
                             <input
                                 required
+                                maxLength={10}
                                 value={form.phoneNumber}
-                                onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
-                                placeholder="0555 12 34 56"
-                                className={inputClass}
+                                onChange={e => {
+                                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                    setForm(f => ({ ...f, phoneNumber: digits }));
+                                    validatePhone(digits);
+                                }}
+                                placeholder="0555123456"
+                                className={`${inputClass} ${phoneError ? 'border-red-400 focus:ring-red-200 focus:border-red-400' : ''}`}
                             />
+                            {phoneError && (
+                                <p className="text-[11px] text-red-500 mt-1">{phoneError}</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-navy/50 mb-1.5">Adresse du cabinet</label>

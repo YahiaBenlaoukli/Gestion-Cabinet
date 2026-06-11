@@ -11,9 +11,8 @@ export function initializeDatabase(): Database.Database {
 
   const version = db.pragma('user_version', { simple: true });
 
-  if (version === 0) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
     password TEXT NOT NULL,
@@ -62,7 +61,9 @@ export function initializeDatabase(): Database.Database {
     FOREIGN KEY (user_id) REFERENCES doctor_profile(user_id),
     FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
     );
-    `);
+  `);
+
+  if (version === 0) {
     db.pragma('user_version = 1');
   }
 

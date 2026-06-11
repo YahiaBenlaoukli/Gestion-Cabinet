@@ -2,13 +2,13 @@ import { getDatabase } from "../db/db";
 import { app } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { DoctorProfile, Prescription } from "../../types/doctor";
 
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_PATH = path.join(__dirname, "..", "..", "assets", "template.pdf");
+const TEMPLATE_PATH = path.join(__dirname, "..", "src", "assets", "ordonnance", "template.pdf");
 const PDF_OUTPUT_DIR = path.join(app.getPath("userData"), "prescriptions");
 
 function mapRowToDoctorProfile(row: Record<string, unknown>): DoctorProfile {
@@ -26,12 +26,13 @@ function mapRowToDoctorProfile(row: Record<string, unknown>): DoctorProfile {
 
 export async function createDoctorProfile(userId: number, fullName: string, speciality: string, phoneNumber: string, address: string) {
     try {
+        console.log("creating doctor profile in db");
         const db = getDatabase();
         const stmt = db.prepare(`
             INSERT INTO doctor_profile (user_id, full_name, phone_number, address, speciality, has_completed_profile)
             VALUES (?, ?, ?, ?, ?, ?)
         `);
-        const result = stmt.run(userId, fullName, phoneNumber, address, speciality, true);
+        const result = stmt.run(userId, fullName, phoneNumber, address, speciality, 1);
 
         const doctor: DoctorProfile = {
             id: result.lastInsertRowid as number,
@@ -45,7 +46,8 @@ export async function createDoctorProfile(userId: number, fullName: string, spec
 
         return { status: "success", data: doctor };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        console.error("createDoctorProfile error:", error);
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -60,7 +62,8 @@ export function getDoctorProfileByUserId(userId: number) {
         const doctor = mapRowToDoctorProfile(row);
         return { status: "success", data: doctor };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        console.error("getDoctorProfileByUserId error:", error);
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -91,7 +94,8 @@ export async function setPrescriptionPdf(doctorId: number, pdfPath: string) {
 
         return { status: "success", data: { doctor, pdfPath: pdfResult.pdfPath } };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        console.error("setPrescriptionPdf error:", error);
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -105,7 +109,8 @@ export function addPrescription(userId: number, patientId: number, medicineName:
         const result = stmt.run(userId, patientId, medicineName, dosage, frequency, duration);
         return { status: "success", data: result };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        console.error("addPrescription error:", error);
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -118,30 +123,35 @@ async function fillTemplate(
 
         const pages = pdfDoc.getPages();
         const firstPage = pages[0];
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const { width, height } = firstPage.getSize();
 
         firstPage.drawText(doctor.fullName, {
-            x: 100,
-            y: height - 100,
-            size: 24,
+            x: 175,
+            y: height - 55,
+            size: 20,
+            font: helveticaFont,
             color: rgb(0, 0, 0),
         });
         firstPage.drawText(doctor.speciality, {
-            x: 100,
-            y: height - 150,
-            size: 20,
+            x: 360,
+            y: height - 55,
+            size: 13,
+            font: helveticaFont,
             color: rgb(0, 0, 0),
         });
         firstPage.drawText(doctor.phoneNumber, {
             x: 100,
-            y: height - 200,
-            size: 20,
+            y: height - 85,
+            size: 13,
+            font: helveticaFont,
             color: rgb(0, 0, 0),
         });
         firstPage.drawText(doctor.address, {
-            x: 100,
-            y: height - 250,
-            size: 20,
+            x: 430,
+            y: height - 85,
+            size: 13,
+            font: helveticaFont,
             color: rgb(0, 0, 0),
         });
 

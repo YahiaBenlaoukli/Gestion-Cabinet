@@ -17,9 +17,8 @@ function initializeDatabase() {
   db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   const version = db.pragma("user_version", { simple: true });
-  if (version === 0) {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
     password TEXT NOT NULL,
@@ -68,7 +67,8 @@ function initializeDatabase() {
     FOREIGN KEY (user_id) REFERENCES doctor_profile(user_id),
     FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
     );
-    `);
+  `);
+  if (version === 0) {
     db.pragma("user_version = 1");
   }
   return db;
@@ -19277,7 +19277,7 @@ var PDFButton = (
   }(PDFField)
 );
 const __dirname$2 = path$1.dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_PATH = path$1.join(__dirname$2, "..", "..", "assets", "template.pdf");
+const TEMPLATE_PATH = path$1.join(__dirname$2, "..", "src", "assets", "ordonnance", "template.pdf");
 const PDF_OUTPUT_DIR = path$1.join(app.getPath("userData"), "prescriptions");
 function mapRowToDoctorProfile(row) {
   return {
@@ -19293,12 +19293,13 @@ function mapRowToDoctorProfile(row) {
 }
 async function createDoctorProfile(userId, fullName, speciality, phoneNumber, address) {
   try {
+    console.log("creating doctor profile in db");
     const db2 = getDatabase();
     const stmt = db2.prepare(`
             INSERT INTO doctor_profile (user_id, full_name, phone_number, address, speciality, has_completed_profile)
             VALUES (?, ?, ?, ?, ?, ?)
         `);
-    const result = stmt.run(userId, fullName, phoneNumber, address, speciality, true);
+    const result = stmt.run(userId, fullName, phoneNumber, address, speciality, 1);
     const doctor = {
       id: result.lastInsertRowid,
       userId,
@@ -19310,7 +19311,8 @@ async function createDoctorProfile(userId, fullName, speciality, phoneNumber, ad
     };
     return { status: "success", data: doctor };
   } catch (error2) {
-    return { status: "fail", message: error2 };
+    console.error("createDoctorProfile error:", error2);
+    return { status: "fail", message: error2.message };
   }
 }
 function getDoctorProfileByUserId(userId) {
@@ -19324,7 +19326,8 @@ function getDoctorProfileByUserId(userId) {
     const doctor = mapRowToDoctorProfile(row);
     return { status: "success", data: doctor };
   } catch (error2) {
-    return { status: "fail", message: error2 };
+    console.error("getDoctorProfileByUserId error:", error2);
+    return { status: "fail", message: error2.message };
   }
 }
 async function setPrescriptionPdf(doctorId, pdfPath) {
@@ -19345,7 +19348,8 @@ async function setPrescriptionPdf(doctorId, pdfPath) {
     doctor.pdfPath = pdfResult.pdfPath;
     return { status: "success", data: { doctor, pdfPath: pdfResult.pdfPath } };
   } catch (error2) {
-    return { status: "fail", message: error2 };
+    console.error("setPrescriptionPdf error:", error2);
+    return { status: "fail", message: error2.message };
   }
 }
 function addPrescription(userId, patientId, medicineName, dosage, frequency, duration) {
@@ -19358,7 +19362,8 @@ function addPrescription(userId, patientId, medicineName, dosage, frequency, dur
     const result = stmt.run(userId, patientId, medicineName, dosage, frequency, duration);
     return { status: "success", data: result };
   } catch (error2) {
-    return { status: "fail", message: error2 };
+    console.error("addPrescription error:", error2);
+    return { status: "fail", message: error2.message };
   }
 }
 async function fillTemplate(doctor) {
@@ -19367,29 +19372,34 @@ async function fillTemplate(doctor) {
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
     const pages = pdfDoc.getPages();
     const firstPage = pages[0];
+    const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const { width, height } = firstPage.getSize();
     firstPage.drawText(doctor.fullName, {
-      x: 100,
-      y: height - 100,
-      size: 24,
+      x: 175,
+      y: height - 55,
+      size: 20,
+      font: helveticaFont,
       color: rgb(0, 0, 0)
     });
     firstPage.drawText(doctor.speciality, {
-      x: 100,
-      y: height - 150,
-      size: 20,
+      x: 360,
+      y: height - 55,
+      size: 13,
+      font: helveticaFont,
       color: rgb(0, 0, 0)
     });
     firstPage.drawText(doctor.phoneNumber, {
       x: 100,
-      y: height - 200,
-      size: 20,
+      y: height - 85,
+      size: 13,
+      font: helveticaFont,
       color: rgb(0, 0, 0)
     });
     firstPage.drawText(doctor.address, {
-      x: 100,
-      y: height - 250,
-      size: 20,
+      x: 430,
+      y: height - 85,
+      size: 13,
+      font: helveticaFont,
       color: rgb(0, 0, 0)
     });
     const modifiedPdfBytes = await pdfDoc.save();
