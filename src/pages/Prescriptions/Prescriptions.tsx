@@ -2,8 +2,20 @@ import { useEffect, useState } from 'react';
 import type { DoctorProfile, Prescription } from '../../../types/doctor';
 import type { Patient } from '../../../types/patient';
 
-/* ─── Step type for the wizard flow ─── */
+/* ─── Types ─── */
 type Step = 'loading' | 'create-profile' | 'generate-pdf' | 'prescriptions';
+
+type MedicationEntry = {
+    medicineName: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+    quantity: string;
+};
+
+/* ─── Shared input class ─── */
+const inputClass =
+    'w-full px-4 py-2.5 text-sm bg-navy/[0.02] border border-navy/[0.08] rounded-xl text-navy placeholder:text-navy/25 focus:outline-none focus:ring-2 focus:ring-pink/20 focus:border-pink/30 transition-all duration-200';
 
 /* ─── Inline SVG Icons ─── */
 const icons = {
@@ -66,18 +78,34 @@ function formatDate(dateStr: string) {
 /*                       PRESCRIPTIONS PAGE                           */
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function Prescriptions() {
+    /* ── Auth & wizard state ── */
     const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-
     const [step, setStep] = useState<Step>('loading');
     const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
-    const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
-    const [patients, setPatients] = useState<Patient[]>([]);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-    const [showAddModal, setShowAddModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
 
-    /* ── Load auth + initial data ── */
+    /* ── Patient selection ── */
+    const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+    const [patientSearchQuery, setPatientSearchQuery] = useState('');
+    const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>([]);
+    const [isSearchingPatient, setIsSearchingPatient] = useState(false);
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+
+    /* ── New ordonnance builder ── */
+    const [newMedications, setNewMedications] = useState<MedicationEntry[]>([]);
+    const [medForm, setMedForm] = useState<MedicationEntry>({
+        medicineName: '', dosage: '', frequency: '', duration: '', quantity: '',
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
+    /* ── Patient's existing prescriptions ── */
+    const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+
+    /* ══════════════════════ Effects ══════════════════════ */
+
+    /* ── Load auth ── */
     useEffect(() => {
         (async () => {
             try {
@@ -85,9 +113,7 @@ export default function Prescriptions() {
                 if (auth?.status === 'success' && auth.user?.id) {
                     setCurrentUserId(auth.user.id);
                 } else {
-                    // Not logged in — redirect
                     window.location.hash = '/';
-                    return;
                 }
             } catch {
                 window.location.hash = '/';
@@ -96,62 +122,63 @@ export default function Prescriptions() {
     }, []);
 
     useEffect(() => {
-        if (currentUserId !== null) {
-            loadData(currentUserId);
-        }
+        if (currentUserId !== null) loadData(currentUserId);
     }, [currentUserId]);
 
     const loadData = async (userId: number) => {
         try {
-            // Check if doctor profile exists
-            const profileResult = await window.ipcRenderer.invoke('get-doctor-profile', userId);
-
+            const profileResult = await (window as any).ipcRenderer.invoke('get-doctor-profile', userId);
             if (profileResult.status === 'success' && profileResult.data) {
                 setDoctorProfile(profileResult.data);
-
-                if (profileResult.data.pdfPath) {
-                    setStep('prescriptions');
-                    // Load prescriptions
-                    const prescResult = await window.ipcRenderer.invoke('get-all-prescriptions');
-                    if (prescResult.status === 'success') {
-                        setPrescriptions(prescResult.data || []);
-                    }
-                } else {
-                    setStep('generate-pdf');
-                }
+                setStep(profileResult.data.pdfPath ? 'prescriptions' : 'generate-pdf');
             } else {
                 setStep('create-profile');
             }
-
-            // Load patients for the prescription form
-            const patientsData = await window.ipcRenderer.invoke('get-all-patients');
-            setPatients(patientsData || []);
         } catch (error) {
             console.error('Error loading data:', error);
             setStep('create-profile');
         }
     };
 
+    /* ── Patient search (debounced) ── */
+    useEffect(() => {
+        if (!patientSearchQuery.trim() || selectedPatient) {
+            if (!patientSearchQuery.trim()) {
+                setPatientSearchResults([]);
+                setShowPatientDropdown(false);
+            }
+            return;
+        }
+        const timer = setTimeout(async () => {
+            setIsSearchingPatient(true);
+            try {
+                const results = await (window as any).ipcRenderer.searchPatient(patientSearchQuery);
+                setPatientSearchResults(results || []);
+                setShowPatientDropdown(true);
+            } catch (e) {
+                console.error('Search error:', e);
+                setPatientSearchResults([]);
+            } finally {
+                setIsSearchingPatient(false);
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [patientSearchQuery, selectedPatient]);
+
+    /* ══════════════════════ Handlers ══════════════════════ */
+
     /* ── Create doctor profile ── */
     const handleCreateProfile = async (form: { fullName: string; speciality: string; phoneNumber: string; address: string; email: string }) => {
         try {
-            console.log("creating doctor profile", currentUserId, form.fullName, form.speciality, form.phoneNumber, form.address, form.email)
-            const result = await window.ipcRenderer.invoke(
+            const result = await (window as any).ipcRenderer.invoke(
                 'create-doctor-profile',
-                currentUserId,
-                form.fullName,
-                form.speciality,
-                form.phoneNumber,
-                form.address,
-                form.email
+                currentUserId, form.fullName, form.speciality, form.phoneNumber, form.address, form.email
             );
             if (result.status === 'success') {
                 setDoctorProfile(result.data);
                 setStep('generate-pdf');
                 setShowProfileModal(false);
                 showSuccess('Profil médecin créé avec succès !');
-            } else {
-                console.error('Failed to create doctor profile:', result);
             }
         } catch (error) {
             console.error('Error creating profile:', error);
@@ -162,10 +189,8 @@ export default function Prescriptions() {
     const handleGeneratePdf = async () => {
         if (!doctorProfile) return;
         try {
-            console.log("generating pdf")
             setIsGeneratingPdf(true);
-            const result = await window.ipcRenderer.invoke('set-prescription-pdf', doctorProfile.id, '');
-            console.log("pdf result", result)
+            const result = await (window as any).ipcRenderer.invoke('set-prescription-pdf', doctorProfile.id);
             if (result.status === 'success') {
                 setDoctorProfile(prev => prev ? { ...prev, pdfPath: result.data.pdfPath } : null);
                 setStep('prescriptions');
@@ -178,38 +203,87 @@ export default function Prescriptions() {
         }
     };
 
-    /* ── Add prescription ── */
-    const handleAddPrescription = async (form: { patientId: number; medicineName: string; dosage: string; frequency: string; duration: string }) => {
+    /* ── Patient selection ── */
+    const loadPatientPrescriptions = async (patientId: number) => {
         try {
-            const result = await window.ipcRenderer.invoke(
-                'add-prescription',
-                currentUserId,
-                form.patientId,
-                form.medicineName,
-                form.dosage,
-                form.frequency,
-                form.duration
-            );
+            const result = await (window as any).ipcRenderer.invoke('get-all-prescriptions');
             if (result.status === 'success') {
-                const prescResult = await window.ipcRenderer.invoke('get-all-prescriptions');
-                if (prescResult.status === 'success') {
-                    setPrescriptions(prescResult.data || []);
-                }
-                setShowAddModal(false);
-                showSuccess('Ordonnance ajoutée avec succès !');
+                const filtered = (result.data || []).filter((p: Prescription) => p.patientId === patientId);
+                // Sort by most recent first
+                filtered.sort((a: Prescription, b: Prescription) =>
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+                setPatientPrescriptions(filtered);
             }
-        } catch (error) {
-            console.error('Error adding prescription:', error);
+        } catch (e) {
+            console.error('Error loading prescriptions:', e);
+        }
+    };
+
+    const handleSelectPatient = async (patient: Patient) => {
+        setSelectedPatient(patient);
+        setPatientSearchQuery('');
+        setShowPatientDropdown(false);
+        setNewMedications([]);
+        setMedForm({ medicineName: '', dosage: '', frequency: '', duration: '', quantity: '' });
+        await loadPatientPrescriptions(patient.id);
+    };
+
+    const handleChangePatient = () => {
+        setSelectedPatient(null);
+        setPatientSearchQuery('');
+        setPatientSearchResults([]);
+        setShowPatientDropdown(false);
+        setNewMedications([]);
+        setPatientPrescriptions([]);
+    };
+
+    /* ── Medication management ── */
+    const handleAddMedication = () => {
+        if (!medForm.medicineName.trim()) return;
+        setNewMedications(prev => [...prev, { ...medForm }]);
+        setMedForm({ medicineName: '', dosage: '', frequency: '', duration: '', quantity: '' });
+    };
+
+    const handleRemoveMedication = (index: number) => {
+        setNewMedications(prev => prev.filter((_, i) => i !== index));
+    };
+
+    /* ── Save ordonnance ── */
+    const handleSaveOrdonnance = async () => {
+        if (!selectedPatient || !currentUserId || newMedications.length === 0) return;
+        setIsSaving(true);
+        try {
+            for (const med of newMedications) {
+                await (window as any).ipcRenderer.invoke(
+                    'add-prescription',
+                    currentUserId,
+                    selectedPatient.id,
+                    med.medicineName,
+                    med.dosage,
+                    med.frequency,
+                    med.quantity,
+                    med.duration
+                );
+            }
+            setNewMedications([]);
+            showSuccess('Ordonnance enregistrée avec succès !');
+            await loadPatientPrescriptions(selectedPatient.id);
+        } catch (e) {
+            console.error('Error saving ordonnance:', e);
+        } finally {
+            setIsSaving(false);
         }
     };
 
     /* ── Delete prescription ── */
-    const handleDelete = async (id: number) => {
+    const handleDeletePrescription = async (id: number) => {
         try {
-            await window.ipcRenderer.invoke('delete-prescription', id);
-            setPrescriptions(prev => prev.filter(p => p.id !== id));
-        } catch (error) {
-            console.error('Error deleting prescription:', error);
+            await (window as any).ipcRenderer.invoke('delete-prescription', id);
+            setPatientPrescriptions(prev => prev.filter(p => p.id !== id));
+            showSuccess('Médicament supprimé');
+        } catch (e) {
+            console.error('Error deleting prescription:', e);
         }
     };
 
@@ -218,12 +292,10 @@ export default function Prescriptions() {
         setTimeout(() => setSuccessMessage(''), 3000);
     };
 
-    const getPatientName = (patientId: number) => {
-        const patient = patients.find(p => p.id === patientId);
-        return patient?.fullName || `Patient #${patientId}`;
-    };
+    const getInitials = (name: string) =>
+        name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-    /* ── Loading State ── */
+    /* ══════════════════════ Loading ══════════════════════ */
     if (step === 'loading') {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
@@ -243,39 +315,25 @@ export default function Prescriptions() {
                         Gérez vos ordonnances et votre profil médecin
                     </p>
                 </div>
-                {step === 'prescriptions' && (
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="flex items-center gap-2 bg-gradient-to-r from-pink to-pink-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                    >
-                        {icons.plus}
-                        <span>Nouvelle ordonnance</span>
-                    </button>
-                )}
             </div>
 
             {/* ═══════ Step 1: Create Profile ═══════ */}
             {step === 'create-profile' && (
                 <div className="flex items-center justify-center min-h-[450px]">
                     <div className="bg-white rounded-2xl p-10 shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] max-w-md w-full text-center animate-[scaleIn_0.3s_ease-out]">
-                        {/* Decorative icon */}
                         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-pink/10 to-pink/5 text-pink mb-5">
                             {icons.stethoscope}
                         </div>
-
                         <h2 className="text-xl font-bold text-navy mb-2">Bienvenue, Docteur ! 👋</h2>
                         <p className="text-sm text-navy/45 leading-relaxed mb-6">
                             Pour commencer à créer des ordonnances, veuillez d'abord configurer votre profil médecin.
                             Vos informations apparaîtront sur chaque ordonnance.
                         </p>
-
-                        {/* Decorative dots */}
                         <div className="flex items-center justify-center gap-1.5 mb-6">
                             <span className="w-2 h-2 rounded-full bg-pink" />
                             <span className="w-2 h-2 rounded-full bg-navy/10" />
                             <span className="w-2 h-2 rounded-full bg-navy/10" />
                         </div>
-
                         <button
                             onClick={() => setShowProfileModal(true)}
                             className="inline-flex items-center gap-2 bg-gradient-to-r from-pink to-pink-light text-white text-sm font-semibold px-7 py-3 rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
@@ -291,21 +349,17 @@ export default function Prescriptions() {
             {step === 'generate-pdf' && doctorProfile && (
                 <div className="flex items-center justify-center min-h-[450px]">
                     <div className="bg-white rounded-2xl p-10 shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] max-w-lg w-full text-center animate-[scaleIn_0.3s_ease-out]">
-                        {/* Decorative icon */}
                         <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-navy/10 to-navy/5 text-navy mb-5">
                             {icons.fileText}
                         </div>
-
                         <h2 className="text-xl font-bold text-navy mb-2">Générer votre modèle PDF ✨</h2>
                         <p className="text-sm text-navy/45 leading-relaxed mb-6">
                             Votre profil est prêt ! Générez maintenant votre modèle d'ordonnance personnalisé avec vos informations.
                         </p>
-
-                        {/* Doctor info preview */}
                         <div className="bg-navy/[0.02] border border-navy/[0.06] rounded-xl p-4 mb-6 text-left space-y-2">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink to-pink-light flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                                    {doctorProfile.fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                                    {getInitials(doctorProfile.fullName)}
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold text-navy">Dr. {doctorProfile.fullName}</p>
@@ -327,14 +381,11 @@ export default function Prescriptions() {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Progress dots */}
                         <div className="flex items-center justify-center gap-1.5 mb-6">
                             <span className="w-2 h-2 rounded-full bg-pink/30" />
                             <span className="w-2 h-2 rounded-full bg-pink" />
                             <span className="w-2 h-2 rounded-full bg-navy/10" />
                         </div>
-
                         <button
                             onClick={handleGeneratePdf}
                             disabled={isGeneratingPdf}
@@ -356,14 +407,14 @@ export default function Prescriptions() {
                 </div>
             )}
 
-            {/* ═══════ Step 3: Prescriptions List ═══════ */}
+            {/* ═══════ Step 3: Prescriptions Workspace ═══════ */}
             {step === 'prescriptions' && (
                 <>
-                    {/* Doctor profile summary card */}
+                    {/* ── Doctor profile summary card ── */}
                     {doctorProfile && (
                         <div className="bg-white rounded-2xl p-5 shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] flex items-center gap-4">
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-pink to-pink-light flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                                {doctorProfile.fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                                {getInitials(doctorProfile.fullName)}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-navy">Dr. {doctorProfile.fullName}</p>
@@ -389,93 +440,261 @@ export default function Prescriptions() {
                         </div>
                     )}
 
-                    {/* Prescriptions Table */}
-                    <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(30,42,86,0.06)] overflow-hidden">
-                        {prescriptions.length === 0 ? (
-                            <div className="text-center py-16">
-                                <div className="text-navy/15 text-5xl mb-4">💊</div>
-                                <div className="text-sm text-navy/40 font-medium mb-1">Aucune ordonnance pour le moment</div>
-                                <div className="text-xs text-navy/25 mb-5">Commencez par créer votre première ordonnance</div>
+                    {/* ── Patient Selection or Workspace ── */}
+                    {!selectedPatient ? (
+                        /* ═══════ Patient Search Card ═══════ */
+                        <div className="bg-white rounded-2xl p-8 shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04]">
+                            <div className="max-w-md mx-auto text-center">
+                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-pink/10 to-pink/5 text-pink mb-4">
+                                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+                                    </svg>
+                                </div>
+                                <h2 className="text-lg font-bold text-navy mb-1">Sélectionner un patient</h2>
+                                <p className="text-xs text-navy/40 mb-5">Recherchez un patient pour créer ou consulter ses ordonnances</p>
+
+                                <div className="relative text-left">
+                                    <div className="relative">
+                                        <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-navy/25 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                        </svg>
+                                        <input
+                                            value={patientSearchQuery}
+                                            onChange={e => setPatientSearchQuery(e.target.value)}
+                                            onFocus={() => { if (patientSearchResults.length > 0) setShowPatientDropdown(true); }}
+                                            placeholder="Rechercher par nom..."
+                                            className={`${inputClass} pl-10`}
+                                            autoComplete="off"
+                                        />
+                                        {isSearchingPatient && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                <div className="w-4 h-4 border-2 border-navy/10 border-t-pink rounded-full animate-spin" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Search results dropdown */}
+                                    {showPatientDropdown && (
+                                        <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-navy/[0.08] rounded-xl shadow-[0_8px_30px_rgba(30,42,86,0.12)] max-h-48 overflow-y-auto">
+                                            {patientSearchResults.length === 0 ? (
+                                                <div className="px-4 py-3 text-xs text-navy/35 text-center">Aucun patient trouvé</div>
+                                            ) : (
+                                                patientSearchResults.map(patient => (
+                                                    <button
+                                                        key={patient.id}
+                                                        onClick={() => handleSelectPatient(patient)}
+                                                        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-navy/[0.03] transition-colors cursor-pointer text-left"
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink/20 to-pink-light/20 flex items-center justify-center text-pink text-xs font-bold flex-shrink-0">
+                                                            {getInitials(patient.fullName)}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium text-navy truncate">{patient.fullName}</p>
+                                                            {patient.phoneNumber && <p className="text-[11px] text-navy/35">{patient.phoneNumber}</p>}
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* ═══════ Selected Patient Card ═══════ */}
+                            <div className="bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink/20 to-pink-light/20 flex items-center justify-center text-pink text-sm font-bold flex-shrink-0">
+                                    {getInitials(selectedPatient.fullName)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-navy">{selectedPatient.fullName}</p>
+                                    <p className="text-xs text-navy/40">
+                                        {[selectedPatient.phoneNumber, selectedPatient.email].filter(Boolean).join(' • ')}
+                                    </p>
+                                </div>
                                 <button
-                                    onClick={() => setShowAddModal(true)}
-                                    className="inline-flex items-center gap-2 bg-gradient-to-r from-pink to-pink-light text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.2)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.3)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                                    onClick={handleChangePatient}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-navy/[0.04] text-navy/50 text-xs font-medium hover:bg-navy/[0.08] hover:text-navy transition-all duration-200 cursor-pointer"
                                 >
-                                    {icons.plus}
-                                    Créer une ordonnance
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path d="M3 21l7-7" />
+                                    </svg>
+                                    <span>Changer</span>
                                 </button>
                             </div>
-                        ) : (
-                            <>
-                                <div className="px-5 py-3 border-b border-navy/[0.06] flex items-center justify-between">
-                                    <div className="flex items-center gap-2 text-xs text-navy/40 font-medium">
-                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center">
-                                            <span className="text-[10px] font-bold text-white">{prescriptions.length}</span>
-                                        </div>
-                                        <span>{prescriptions.length} ordonnance{prescriptions.length > 1 ? 's' : ''}</span>
+
+                            {/* ═══════ New Ordonnance Builder ═══════ */}
+                            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] overflow-hidden">
+                                <div className="px-5 py-3.5 border-b border-navy/[0.06] flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink to-pink-light flex items-center justify-center">
+                                        {icons.plus}
                                     </div>
+                                    <h3 className="text-sm font-bold text-navy">Nouvelle Ordonnance</h3>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="border-b border-navy/[0.06]">
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Patient</th>
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Médicament</th>
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Dosage</th>
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Fréquence</th>
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Durée</th>
-                                                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-navy/40">Date</th>
-                                                <th className="w-16 px-5 py-3" />
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {prescriptions.map((presc) => (
-                                                <tr key={presc.id} className="group border-b border-navy/[0.03] hover:bg-navy/[0.015] transition-colors">
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="text-sm font-medium text-navy">{getPatientName(presc.patientId)}</span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="inline-flex items-center gap-1.5 text-sm text-navy/70">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-pink flex-shrink-0" />
-                                                            {presc.medicineName}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="text-xs font-mono text-navy/50 bg-navy/[0.03] px-2 py-1 rounded-md">{presc.dosage}</span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="text-sm text-navy/60">{presc.frequency}</span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="text-sm text-navy/60">{presc.duration}</span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <span className="text-xs text-navy/40">{formatDate(presc.createdAt)}</span>
-                                                    </td>
-                                                    <td className="px-5 py-3.5">
-                                                        <button
-                                                            onClick={() => handleDelete(presc.id)}
-                                                            className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-                                                            title="Supprimer"
-                                                        >
-                                                            {icons.trash}
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                <div className="p-5 space-y-4">
+                                    {/* Medication input form */}
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-navy/50 mb-1.5">Médicament</label>
+                                            <input
+                                                value={medForm.medicineName}
+                                                onChange={e => setMedForm(f => ({ ...f, medicineName: e.target.value }))}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMedication(); } }}
+                                                placeholder="Nom du médicament"
+                                                className={inputClass}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-navy/50 mb-1.5">Dosage</label>
+                                                <input
+                                                    value={medForm.dosage}
+                                                    onChange={e => setMedForm(f => ({ ...f, dosage: e.target.value }))}
+                                                    placeholder="ex: 500mg"
+                                                    className={inputClass}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-navy/50 mb-1.5">Quantité</label>
+                                                <input
+                                                    value={medForm.quantity}
+                                                    onChange={e => setMedForm(f => ({ ...f, quantity: e.target.value }))}
+                                                    placeholder="ex: 2 boîtes"
+                                                    className={inputClass}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-navy/50 mb-1.5">Fréquence</label>
+                                                <input
+                                                    value={medForm.frequency}
+                                                    onChange={e => setMedForm(f => ({ ...f, frequency: e.target.value }))}
+                                                    placeholder="ex: 3x/jour"
+                                                    className={inputClass}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-navy/50 mb-1.5">Durée</label>
+                                                <input
+                                                    value={medForm.duration}
+                                                    onChange={e => setMedForm(f => ({ ...f, duration: e.target.value }))}
+                                                    placeholder="ex: 7 jours"
+                                                    className={inputClass}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleAddMedication}
+                                            disabled={!medForm.medicineName.trim()}
+                                            className="flex items-center gap-1.5 text-xs font-semibold text-pink hover:text-pink-light transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                        >
+                                            {icons.plus}
+                                            Ajouter le médicament
+                                        </button>
+                                    </div>
+
+                                    {/* Added medications list */}
+                                    {newMedications.length > 0 && (
+                                        <div className="border-t border-navy/[0.06] pt-4 space-y-2">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-navy/30 mb-2">
+                                                Médicaments ajoutés ({newMedications.length})
+                                            </p>
+                                            {newMedications.map((med, index) => (
+                                                <div key={index} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-navy/[0.02] border border-navy/[0.04] group">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-pink flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-navy">{med.medicineName}</p>
+                                                        <p className="text-[11px] text-navy/40">
+                                                            {[med.dosage, med.quantity, med.frequency, med.duration].filter(Boolean).join(' • ')}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleRemoveMedication(index)}
+                                                        className="p-1 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                                                    >
+                                                        {icons.trash}
+                                                    </button>
+                                                </div>
                                             ))}
-                                        </tbody>
-                                    </table>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Bottom add row */}
-                                <div className="flex items-center gap-6 px-5 py-2.5 border-t border-navy/[0.04] text-navy/25 text-xs">
-                                    <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 hover:text-pink transition-colors cursor-pointer">
-                                        {icons.plus} Ajouter une ordonnance
-                                    </button>
+                                {/* Save ordonnance button */}
+                                {newMedications.length > 0 && (
+                                    <div className="px-5 py-3.5 border-t border-navy/[0.06] flex justify-end">
+                                        <button
+                                            onClick={handleSaveOrdonnance}
+                                            disabled={isSaving}
+                                            className="flex items-center gap-2 bg-gradient-to-r from-pink to-pink-light text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isSaving ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    Enregistrement...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {icons.check}
+                                                    Enregistrer l'ordonnance
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ═══════ Past Ordonnances ═══════ */}
+                            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] overflow-hidden">
+                                <div className="px-5 py-3.5 border-b border-navy/[0.06] flex items-center justify-between">
+                                    <h3 className="text-sm font-bold text-navy">Ordonnances précédentes</h3>
+                                    {patientPrescriptions.length > 0 && (
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center">
+                                                <span className="text-[9px] font-bold text-white">{patientPrescriptions.length}</span>
+                                            </div>
+                                            <span className="text-xs text-navy/35">{patientPrescriptions.length} médicament{patientPrescriptions.length > 1 ? 's' : ''}</span>
+                                        </div>
+                                    )}
                                 </div>
-                            </>
-                        )}
-                    </div>
+
+                                {patientPrescriptions.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <div className="text-navy/15 text-4xl mb-3">📋</div>
+                                        <p className="text-sm text-navy/35 font-medium mb-1">Aucune ordonnance précédente</p>
+                                        <p className="text-xs text-navy/25">Les ordonnances enregistrées pour ce patient apparaîtront ici</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-navy/[0.04]">
+                                        {patientPrescriptions.map(presc => (
+                                            <div key={presc.id} className="flex items-center gap-3 px-5 py-3.5 group hover:bg-navy/[0.015] transition-colors">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-pink/60 flex-shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-navy">{presc.medicineName}</p>
+                                                    <p className="text-[11px] text-navy/40">
+                                                        {[presc.dosage, presc.quantity, presc.frequency, presc.duration].filter(Boolean).join(' • ')}
+                                                    </p>
+                                                </div>
+                                                <span className="text-[10px] text-navy/25 flex-shrink-0">{formatDate(presc.createdAt)}</span>
+                                                <button
+                                                    onClick={() => handleDeletePrescription(presc.id)}
+                                                    className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                                                    title="Supprimer"
+                                                >
+                                                    {icons.trash}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </>
             )}
 
@@ -494,15 +713,6 @@ export default function Prescriptions() {
                 <CreateProfileModal
                     onClose={() => setShowProfileModal(false)}
                     onSave={handleCreateProfile}
-                />
-            )}
-
-            {/* ═══════ Add Prescription Modal ═══════ */}
-            {showAddModal && (
-                <AddPrescriptionModal
-                    patients={patients}
-                    onClose={() => setShowAddModal(false)}
-                    onSave={handleAddPrescription}
                 />
             )}
         </div>
@@ -548,9 +758,6 @@ function CreateProfileModal({
         }
         onSave(form);
     };
-
-    const inputClass =
-        'w-full px-4 py-2.5 text-sm bg-navy/[0.02] border border-navy/[0.08] rounded-xl text-navy placeholder:text-navy/25 focus:outline-none focus:ring-2 focus:ring-pink/20 focus:border-pink/30 transition-all duration-200';
 
     const specialities = [
         'Médecine Générale',
@@ -664,133 +871,6 @@ function CreateProfileModal({
                             className="px-6 py-2.5 text-sm font-semibold bg-gradient-to-r from-pink to-pink-light text-white rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
                         >
                             Créer le profil
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-}
-
-/* ─────────────────────────────────────────────────────────────────── */
-/*                   Add Prescription Modal                            */
-/* ─────────────────────────────────────────────────────────────────── */
-function AddPrescriptionModal({
-    patients,
-    onClose,
-    onSave,
-}: {
-    patients: Patient[];
-    onClose: () => void;
-    onSave: (form: { patientId: number; medicineName: string; dosage: string; frequency: string; duration: string }) => void;
-}) {
-    const [form, setForm] = useState({
-        patientId: '',
-        medicineName: '',
-        dosage: '',
-        frequency: '',
-        duration: '',
-    });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSave({
-            ...form,
-            patientId: Number(form.patientId),
-        });
-    };
-
-    const inputClass =
-        'w-full px-4 py-2.5 text-sm bg-navy/[0.02] border border-navy/[0.08] rounded-xl text-navy placeholder:text-navy/25 focus:outline-none focus:ring-2 focus:ring-pink/20 focus:border-pink/30 transition-all duration-200';
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-navy/30 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]" onClick={onClose} />
-
-            <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-[0_24px_80px_rgba(30,42,86,0.18)] p-7 animate-[scaleIn_0.25s_ease-out]">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-lg font-bold text-navy">Nouvelle Ordonnance</h2>
-                        <p className="text-xs text-navy/40 mt-0.5">Créer une ordonnance pour un patient</p>
-                    </div>
-                    <button onClick={onClose} className="p-2 rounded-xl text-navy/30 hover:text-navy hover:bg-navy/[0.04] transition-colors cursor-pointer">
-                        {icons.close}
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-semibold text-navy/50 mb-1.5">Patient</label>
-                        <select
-                            required
-                            value={form.patientId}
-                            onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
-                            className={inputClass}
-                        >
-                            <option value="">Sélectionner un patient</option>
-                            {patients.map(p => (
-                                <option key={p.id} value={p.id}>{p.fullName}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-navy/50 mb-1.5">Médicament</label>
-                        <input
-                            required
-                            value={form.medicineName}
-                            onChange={e => setForm(f => ({ ...f, medicineName: e.target.value }))}
-                            placeholder="ex: Paracétamol 500mg"
-                            className={inputClass}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-navy/50 mb-1.5">Dosage</label>
-                            <input
-                                required
-                                value={form.dosage}
-                                onChange={e => setForm(f => ({ ...f, dosage: e.target.value }))}
-                                placeholder="500mg"
-                                className={inputClass}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-navy/50 mb-1.5">Fréquence</label>
-                            <input
-                                required
-                                value={form.frequency}
-                                onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}
-                                placeholder="3x/jour"
-                                className={inputClass}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-navy/50 mb-1.5">Durée</label>
-                            <input
-                                required
-                                value={form.duration}
-                                onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
-                                placeholder="7 jours"
-                                className={inputClass}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-3">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-5 py-2.5 text-sm font-medium text-navy/50 hover:text-navy hover:bg-navy/[0.04] rounded-xl transition-colors cursor-pointer"
-                        >
-                            Annuler
-                        </button>
-                        <button
-                            type="submit"
-                            className="px-6 py-2.5 text-sm font-semibold bg-gradient-to-r from-pink to-pink-light text-white rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                        >
-                            Ajouter l'ordonnance
                         </button>
                     </div>
                 </form>

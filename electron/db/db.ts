@@ -58,6 +58,7 @@ export function initializeDatabase(): Database.Database {
     dosage TEXT,
     frequency TEXT,
     duration TEXT,
+    quantity TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES doctor_profile(user_id),
     FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
@@ -65,13 +66,19 @@ export function initializeDatabase(): Database.Database {
   `);
 
   if (version === 0) {
-    db.pragma('user_version = 2');
+    db.pragma('user_version = 3');
   }
 
   // Migration: v1 → v2 — add email column to doctor_profile
   if (version === 1) {
     db.exec(`ALTER TABLE doctor_profile ADD COLUMN email TEXT`);
-    db.pragma('user_version = 2');
+    db.pragma('user_version = 3');
+  }
+
+  // Migration: v2 → v3 — add quantity column to prescriptions
+  if (version === 2) {
+    db.exec(`ALTER TABLE prescriptions ADD COLUMN quantity TEXT`);
+    db.pragma('user_version = 3');
   }
 
   return db;

@@ -18,6 +18,7 @@ export type Prescription = {
     dosage: string;
     frequency: string;
     duration: string;
+    quantity: string;
     createdAt: string;
 }
 

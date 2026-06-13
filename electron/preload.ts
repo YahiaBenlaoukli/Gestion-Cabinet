@@ -1,6 +1,7 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { Patient } from '../types/patient'
 import type { Prescription } from '../types/doctor'
+import { PatientDocument } from '../types/documents'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -27,7 +28,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   updatePatient: (patient: Patient) => ipcRenderer.invoke('update-patient', patient),
   deletePatient: (id: number) => ipcRenderer.invoke('delete-patient', id),
   getPatientById: (id: number) => ipcRenderer.invoke('get-patient-by-id', id),
-  searchPatient: (query: string) => ipcRenderer.invoke('search-patient', query),
+  searchPatient: (query: string) => ipcRenderer.invoke('search-patients', query),
   countPatients: () => ipcRenderer.invoke('count-patients'),
 
 
@@ -39,7 +40,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   //gestion profil médecin
   createDoctorProfile: (userId: number, fullName: string, speciality: string, phoneNumber: string, address: string, email: string) => ipcRenderer.invoke('create-doctor-profile', userId, fullName, speciality, phoneNumber, address, email),
   getDoctorProfile: (userId: number) => ipcRenderer.invoke('get-doctor-profile', userId),
-  setPrescriptionPdf: (doctorId: number, pdfPath: string) => ipcRenderer.invoke('set-prescription-pdf', doctorId, pdfPath),
+  setPrescriptionPdf: (doctorId: number) => ipcRenderer.invoke('set-prescription-pdf', doctorId),
   //gestion des prescriptions
   addPrescription: (prescription: Prescription) => ipcRenderer.invoke('add-prescription', prescription),
   getPrescriptionById: (id: number) => ipcRenderer.invoke('get-prescription-by-id', id),

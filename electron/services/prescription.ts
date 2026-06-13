@@ -69,7 +69,7 @@ export function getDoctorProfileByUserId(userId: number) {
     }
 }
 
-export async function setPrescriptionPdf(doctorId: number, pdfPath: string) {
+export async function setPrescriptionPdf(doctorId: number) {
     try {
         const db = getDatabase();
 
@@ -101,14 +101,14 @@ export async function setPrescriptionPdf(doctorId: number, pdfPath: string) {
     }
 }
 
-export function addPrescription(userId: number, patientId: number, medicineName: string, dosage: string, frequency: string, duration: string) {
+export function addPrescription(userId: number, patientId: number, medicineName: string, dosage: string, frequency: string, quantity: string, duration: string) {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
-            INSERT INTO prescriptions (user_id, patient_id, medicine_name, dosage, frequency, duration)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO prescriptions (user_id, patient_id, medicine_name, dosage, frequency, quantity, duration)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
-        const result = stmt.run(userId, patientId, medicineName, dosage, frequency, duration);
+        const result = stmt.run(userId, patientId, medicineName, dosage, frequency, quantity, duration);
         return { status: "success", data: result };
     } catch (error) {
         console.error("addPrescription error:", error);

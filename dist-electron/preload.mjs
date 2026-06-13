@@ -23,7 +23,7 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   updatePatient: (patient) => electron.ipcRenderer.invoke("update-patient", patient),
   deletePatient: (id) => electron.ipcRenderer.invoke("delete-patient", id),
   getPatientById: (id) => electron.ipcRenderer.invoke("get-patient-by-id", id),
-  searchPatient: (query) => electron.ipcRenderer.invoke("search-patient", query),
+  searchPatient: (query) => electron.ipcRenderer.invoke("search-patients", query),
   countPatients: () => electron.ipcRenderer.invoke("count-patients"),
   //gestion documents
   uploadDocument: (document) => electron.ipcRenderer.invoke("upload-document", document),
@@ -33,7 +33,7 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   //gestion profil médecin
   createDoctorProfile: (userId, fullName, speciality, phoneNumber, address, email) => electron.ipcRenderer.invoke("create-doctor-profile", userId, fullName, speciality, phoneNumber, address, email),
   getDoctorProfile: (userId) => electron.ipcRenderer.invoke("get-doctor-profile", userId),
-  setPrescriptionPdf: (doctorId, pdfPath) => electron.ipcRenderer.invoke("set-prescription-pdf", doctorId, pdfPath),
+  setPrescriptionPdf: (doctorId) => electron.ipcRenderer.invoke("set-prescription-pdf", doctorId),
   //gestion des prescriptions
   addPrescription: (prescription) => electron.ipcRenderer.invoke("add-prescription", prescription),
   getPrescriptionById: (id) => electron.ipcRenderer.invoke("get-prescription-by-id", id),
