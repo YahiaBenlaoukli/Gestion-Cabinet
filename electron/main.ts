@@ -4,7 +4,7 @@ import path from 'node:path'
 import { initializeDatabase } from './db/db'
 import { addPatient, getPatient, getAllPatients, updatePatient, deletePatient, searchPatients, countPatients } from './services/patient'
 import { uploadDocument, getDocumentsByPatientId, deleteDocument, openDocument } from './services/documents'
-import { addPrescription, getPrescriptionById, getAllPrescriptions, updatePrescription, deletePrescription, searchPrescription, countPrescriptions, createDoctorProfile, getDoctorProfileByUserId, setPrescriptionPdf } from './services/prescription'
+import { addPrescription, getPrescriptionById, getAllPrescriptions, updatePrescription, deletePrescription, searchPrescription, countPrescriptions, createDoctorProfile, getDoctorProfileByUserId, setPrescriptionPdf, generatePatientPrescriptionPDF } from './services/prescription'
 import { createUser, login, checkAuth, logout } from './services/auth'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -94,6 +94,7 @@ app.whenReady().then(() => {
   ipcMain.handle('delete-prescription', async (_event, id) => await deletePrescription(id));
   ipcMain.handle('search-prescriptions', async (_event, query) => await searchPrescription(query));
   ipcMain.handle('count-prescriptions', async () => await countPrescriptions());
+  ipcMain.handle('generate-patient-prescription-pdf', async (_event, patientId, prescriptions, doctor, weight) => await generatePatientPrescriptionPDF(patientId, prescriptions, doctor, weight));
   //gestion authentification
   ipcMain.handle('create-user', async (_event, user) => await createUser(user));
   ipcMain.handle('login', async (_event, phoneNumber, password, stayLogged) => login(phoneNumber, password, stayLogged));

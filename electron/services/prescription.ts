@@ -2,14 +2,16 @@ import { getDatabase } from "../db/db";
 import { app } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import type { DoctorProfile, Prescription } from "../../types/doctor";
 
 import { fileURLToPath } from "node:url";
+import type { Patient } from "../../types/patient";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path.join(__dirname, "..", "src", "assets", "ordonnance", "template.pdf");
 const PDF_OUTPUT_DIR = path.join(app.getPath("userData"), "prescriptions");
+const PATIENTS_PDF_DIR = path.join(app.getPath('userData'), 'records', 'Gestion-cabinet-medicale');
 
 function mapRowToDoctorProfile(row: Record<string, unknown>): DoctorProfile {
     return {
@@ -254,3 +256,153 @@ export async function countPrescriptions() {
     }
 }
 
+
+function mapRowToPatient(row: Record<string, unknown>): Patient {
+    return {
+        id: row.id as number,
+        fullName: row.full_name as string,
+        dateOfBirth: row.date_of_birth as string,
+        address: row.address as string,
+        phoneNumber: row.phone_number as string,
+        ssn: row.ssn as string,
+        bloodType: (row.blood_type as Patient["bloodType"]) ?? null,
+        createdAt: row.created_at as string,
+    };
+}
+
+export async function generatePatientPrescriptionPDF(patientId: number, prescriptions: Prescription[], doctor: DoctorProfile, weight?: string) {
+    try {
+        const db = getDatabase();
+        const patientStmt = db.prepare(`SELECT * FROM patients WHERE id = ?`);
+        const patientResult = patientStmt.get(patientId) as Record<string, unknown> | undefined;
+        if (!patientResult) {
+            return { status: "fail", message: "Patient not found" };
+        }
+        const patient = mapRowToPatient(patientResult);
+        const pdfResult = await fillPatientPrescriptionTemplate(patient, prescriptions, doctor, weight);
+        if (pdfResult.status === "fail") {
+            return pdfResult;
+        }
+
+        return { status: "success", data: pdfResult.pdfPath };
+    } catch (error) {
+        console.error("generatePatientPrescriptionPDF error:", error);
+        return { status: "fail", message: (error as Error).message };
+    }
+}
+
+async function fillPatientPrescriptionTemplate(
+    patient: Patient,
+    prescriptions: Prescription[],
+    doctor: DoctorProfile,
+    weight?: string
+): Promise<{ status: "success"; pdfPath: string } | { status: "fail"; message: string }> {
+    try {
+        const existingPdfBytes = await fs.readFile(doctor.pdfPath!);
+        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+        const pages = pdfDoc.getPages();
+        const firstPage = pages[0];
+        const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const helveticaFontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const { width, height } = firstPage.getSize();
+
+        drawPatientInformation(firstPage, patient, helveticaFontBold, helveticaFont, width, height, weight);
+        drawPrescriptions(firstPage, prescriptions, helveticaFontBold, helveticaFont, width, height);
+
+        const modifiedPdfBytes = await pdfDoc.save();
+
+        await fs.mkdir(PATIENTS_PDF_DIR, { recursive: true });
+        const outputFileName = `prescription_patient_${patient.id}_${Date.now()}.pdf`;
+        const outputPath = path.join(PATIENTS_PDF_DIR, outputFileName);
+        await fs.writeFile(outputPath, modifiedPdfBytes);
+
+        return { status: "success", pdfPath: outputPath };
+    } catch (error) {
+        return { status: "fail", message: (error as Error).message };
+    }
+}
+
+function drawPatientInformation(page: PDFPage, patient: Patient, helveticaFontBold: PDFFont, helveticaFont: PDFFont, width: number, height: number, weight?: string) {
+    const dayOfConsultationText = new Date().toLocaleDateString('en-GB');
+    page.drawText(dayOfConsultationText, {
+        x: 67,
+        y: height - 207,
+        size: 10,
+        font: helveticaFontBold,
+        color: rgb(0, 0, 0),
+    });
+    page.drawText(patient.fullName, {
+        x: 434,
+        y: height - 207,
+        size: 10,
+        font: helveticaFont,
+        color: rgb(0, 0, 0),
+    });
+    page.drawText(patient.dateOfBirth, {
+        x: 486,
+        y: height - 238,
+        size: 10,
+        font: helveticaFontBold,
+        color: rgb(0, 0, 0),
+    });
+    const ageText = `${calculateAge(patient.dateOfBirth).years} ans`;
+    page.drawText(ageText, {
+        x: 400,
+        y: height - 269,
+        size: 10,
+        font: helveticaFontBold,
+        color: rgb(0, 0, 0),
+    });
+    if (weight) {
+        page.drawText(weight, {
+            x: 500,
+            y: height - 269,
+            size: 10,
+            font: helveticaFontBold,
+            color: rgb(0, 0, 0),
+        });
+    }
+}
+
+function drawPrescriptions(page: PDFPage, prescriptions: Prescription[], helveticaFontBold: PDFFont, helveticaFont: PDFFont, width: number, height: number) {
+    const startX = 30;
+    let currentY = height - 315;
+    const lineSpacing = 15;
+    const prescriptionSpacing = 30;
+
+    prescriptions.forEach((prescription, index) => {
+        const numberPrefix = `${index + 1}. `;
+        const medicineLine = `${numberPrefix}${prescription.medicineName}  —  ${prescription.dosage}`;
+
+        page.drawText(medicineLine, {
+            x: startX,
+            y: currentY,
+            size: 11,
+            font: helveticaFontBold,
+            color: rgb(0, 0, 0),
+        });
+        currentY -= lineSpacing;
+
+        const detailsLine = `${prescription.frequency} | Qté: ${prescription.quantity} | Durée: ${prescription.duration}`;
+        page.drawText(detailsLine, {
+            x: startX + 20,
+            y: currentY,
+            size: 9,
+            font: helveticaFont,
+            color: rgb(0.25, 0.25, 0.25),
+        });
+        currentY -= prescriptionSpacing;
+    });
+}
+
+function calculateAge(birthDate: string): { years: number; months: number } {
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let years = today.getFullYear() - birth.getFullYear();
+    let months = today.getMonth() - birth.getMonth();
+    if (months < 0 || (months === 0 && today.getDate() < birth.getDate())) {
+        years--;
+        months += 12;
+    }
+    return { years, months };
+}

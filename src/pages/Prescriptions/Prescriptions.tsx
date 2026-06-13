@@ -99,9 +99,14 @@ export default function Prescriptions() {
         medicineName: '', dosage: '', frequency: '', duration: '', quantity: '',
     });
     const [isSaving, setIsSaving] = useState(false);
+    const [weight, setWeight] = useState('');
 
     /* ── Patient's existing prescriptions ── */
     const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+
+    /* ── PDF generation ── */
+    const [isGeneratingPatientPdf, setIsGeneratingPatientPdf] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     /* ══════════════════════ Effects ══════════════════════ */
 
@@ -226,6 +231,7 @@ export default function Prescriptions() {
         setShowPatientDropdown(false);
         setNewMedications([]);
         setMedForm({ medicineName: '', dosage: '', frequency: '', duration: '', quantity: '' });
+        setWeight('');
         await loadPatientPrescriptions(patient.id);
     };
 
@@ -236,6 +242,7 @@ export default function Prescriptions() {
         setShowPatientDropdown(false);
         setNewMedications([]);
         setPatientPrescriptions([]);
+        setWeight('');
     };
 
     /* ── Medication management ── */
@@ -254,8 +261,9 @@ export default function Prescriptions() {
         if (!selectedPatient || !currentUserId || newMedications.length === 0) return;
         setIsSaving(true);
         try {
+            const savedPrescriptions: Prescription[] = [];
             for (const med of newMedications) {
-                await (window as any).ipcRenderer.invoke(
+                const result = await (window as any).ipcRenderer.invoke(
                     'add-prescription',
                     currentUserId,
                     selectedPatient.id,
@@ -265,14 +273,65 @@ export default function Prescriptions() {
                     med.quantity,
                     med.duration
                 );
+                if (result.status === 'success') {
+                    savedPrescriptions.push({
+                        id: result.data.lastInsertRowid,
+                        userId: currentUserId,
+                        patientId: selectedPatient.id,
+                        medicineName: med.medicineName,
+                        dosage: med.dosage,
+                        frequency: med.frequency,
+                        quantity: med.quantity,
+                        duration: med.duration,
+                        createdAt: new Date().toISOString(),
+                    });
+                }
             }
+
+            // Generate PDF automatically after saving
+            if (doctorProfile && savedPrescriptions.length > 0) {
+                await handleGeneratePatientPdf(savedPrescriptions);
+            }
+
             setNewMedications([]);
-            showSuccess('Ordonnance enregistrée avec succès !');
+            showSuccess('Ordonnance enregistrée et PDF généré avec succès !');
             await loadPatientPrescriptions(selectedPatient.id);
         } catch (e) {
             console.error('Error saving ordonnance:', e);
+            showError('Erreur lors de l\'enregistrement de l\'ordonnance');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    /* ── Generate patient prescription PDF ── */
+    const handleGeneratePatientPdf = async (prescriptions?: Prescription[]) => {
+        if (!selectedPatient || !doctorProfile) return;
+        const medsToUse = prescriptions || patientPrescriptions;
+        if (medsToUse.length === 0) {
+            showError('Aucun médicament à inclure dans le PDF');
+            return;
+        }
+        setIsGeneratingPatientPdf(true);
+        try {
+            const result = await (window as any).ipcRenderer.generatePatientPrescriptionPDF(
+                selectedPatient.id,
+                medsToUse,
+                doctorProfile,
+                weight || undefined
+            );
+            if (result.status === 'success') {
+                showSuccess('PDF de l\'ordonnance généré avec succès !');
+                // Auto-open the generated PDF
+                await (window as any).ipcRenderer.openDocument(result.data);
+            } else {
+                showError(result.message || 'Erreur lors de la génération du PDF');
+            }
+        } catch (e) {
+            console.error('Error generating patient PDF:', e);
+            showError('Erreur lors de la génération du PDF');
+        } finally {
+            setIsGeneratingPatientPdf(false);
         }
     };
 
@@ -290,6 +349,11 @@ export default function Prescriptions() {
     const showSuccess = (msg: string) => {
         setSuccessMessage(msg);
         setTimeout(() => setSuccessMessage(''), 3000);
+    };
+
+    const showError = (msg: string) => {
+        setErrorMessage(msg);
+        setTimeout(() => setErrorMessage(''), 4000);
     };
 
     const getInitials = (name: string) =>
@@ -534,6 +598,16 @@ export default function Prescriptions() {
                                 </div>
 
                                 <div className="p-5 space-y-4">
+                                    {/* Weight input (optional) */}
+                                    <div>
+                                        <label className="block text-xs font-semibold text-navy/50 mb-1.5">Poids du patient <span className="text-navy/25 font-normal">(optionnel)</span></label>
+                                        <input
+                                            value={weight}
+                                            onChange={e => setWeight(e.target.value)}
+                                            placeholder="ex: 70 kg"
+                                            className={`${inputClass} max-w-[200px]`}
+                                        />
+                                    </div>
                                     {/* Medication input form */}
                                     <div className="space-y-3">
                                         <div>
@@ -630,18 +704,18 @@ export default function Prescriptions() {
                                     <div className="px-5 py-3.5 border-t border-navy/[0.06] flex justify-end">
                                         <button
                                             onClick={handleSaveOrdonnance}
-                                            disabled={isSaving}
+                                            disabled={isSaving || isGeneratingPatientPdf}
                                             className="flex items-center gap-2 bg-gradient-to-r from-pink to-pink-light text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(233,30,140,0.25)] hover:shadow-[0_6px_20px_rgba(233,30,140,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {isSaving ? (
+                                            {isSaving || isGeneratingPatientPdf ? (
                                                 <>
                                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    Enregistrement...
+                                                    {isGeneratingPatientPdf ? 'Génération PDF...' : 'Enregistrement...'}
                                                 </>
                                             ) : (
                                                 <>
                                                     {icons.check}
-                                                    Enregistrer l'ordonnance
+                                                    Enregistrer & Générer PDF
                                                 </>
                                             )}
                                         </button>
@@ -653,14 +727,33 @@ export default function Prescriptions() {
                             <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(30,42,86,0.06)] border border-navy/[0.04] overflow-hidden">
                                 <div className="px-5 py-3.5 border-b border-navy/[0.06] flex items-center justify-between">
                                     <h3 className="text-sm font-bold text-navy">Ordonnances précédentes</h3>
-                                    {patientPrescriptions.length > 0 && (
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center">
-                                                <span className="text-[9px] font-bold text-white">{patientPrescriptions.length}</span>
-                                            </div>
-                                            <span className="text-xs text-navy/35">{patientPrescriptions.length} médicament{patientPrescriptions.length > 1 ? 's' : ''}</span>
-                                        </div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {patientPrescriptions.length > 0 && (
+                                            <>
+                                                <button
+                                                    onClick={() => handleGeneratePatientPdf()}
+                                                    disabled={isGeneratingPatientPdf}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-pink/10 to-pink-light/10 text-pink text-xs font-semibold hover:from-pink/20 hover:to-pink-light/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isGeneratingPatientPdf ? (
+                                                        <div className="w-3.5 h-3.5 border-2 border-pink/30 border-t-pink rounded-full animate-spin" />
+                                                    ) : (
+                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                            <polyline points="14 2 14 8 20 8" />
+                                                        </svg>
+                                                    )}
+                                                    Générer PDF
+                                                </button>
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center">
+                                                        <span className="text-[9px] font-bold text-white">{patientPrescriptions.length}</span>
+                                                    </div>
+                                                    <span className="text-xs text-navy/35">{patientPrescriptions.length} médicament{patientPrescriptions.length > 1 ? 's' : ''}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {patientPrescriptions.length === 0 ? (
@@ -705,6 +798,16 @@ export default function Prescriptions() {
                         {icons.check}
                     </span>
                     <span className="text-sm font-medium">{successMessage}</span>
+                </div>
+            )}
+
+            {/* ═══════ Error Toast ═══════ */}
+            {errorMessage && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-[0_8px_30px_rgba(220,38,38,0.25)] animate-[slideUp_0.25s_ease-out]">
+                    <span className="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center">
+                        {icons.close}
+                    </span>
+                    <span className="text-sm font-medium">{errorMessage}</span>
                 </div>
             )}
 

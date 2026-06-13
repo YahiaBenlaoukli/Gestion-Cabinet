@@ -46,5 +46,7 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   createUser: (user) => electron.ipcRenderer.invoke("create-user", user),
   login: (phoneNumber, password, stayLogged) => electron.ipcRenderer.invoke("login", phoneNumber, password, stayLogged),
   checkAuth: () => electron.ipcRenderer.invoke("check-auth"),
-  logout: () => electron.ipcRenderer.invoke("logout")
+  logout: () => electron.ipcRenderer.invoke("logout"),
+  //Patient prescription
+  generatePatientPrescriptionPDF: (patientId, prescriptions, doctor, weight) => electron.ipcRenderer.invoke("generate-patient-prescription-pdf", patientId, prescriptions, doctor, weight)
 });

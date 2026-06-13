@@ -19290,6 +19290,7 @@ var PDFButton = (
 const __dirname$2 = path$1.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_PATH = path$1.join(__dirname$2, "..", "src", "assets", "ordonnance", "template.pdf");
 const PDF_OUTPUT_DIR = path$1.join(app.getPath("userData"), "prescriptions");
+const PATIENTS_PDF_DIR = path$1.join(app.getPath("userData"), "records", "Gestion-cabinet-medicale");
 function mapRowToDoctorProfile(row) {
   return {
     id: row.id,
@@ -19499,6 +19500,137 @@ async function countPrescriptions() {
   } catch (error2) {
     return { status: "fail", message: error2 };
   }
+}
+function mapRowToPatient(row) {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    dateOfBirth: row.date_of_birth,
+    address: row.address,
+    phoneNumber: row.phone_number,
+    ssn: row.ssn,
+    bloodType: row.blood_type ?? null,
+    createdAt: row.created_at
+  };
+}
+async function generatePatientPrescriptionPDF(patientId, prescriptions, doctor, weight) {
+  try {
+    const db2 = getDatabase();
+    const patientStmt = db2.prepare(`SELECT * FROM patients WHERE id = ?`);
+    const patientResult = patientStmt.get(patientId);
+    if (!patientResult) {
+      return { status: "fail", message: "Patient not found" };
+    }
+    const patient = mapRowToPatient(patientResult);
+    const pdfResult = await fillPatientPrescriptionTemplate(patient, prescriptions, doctor, weight);
+    if (pdfResult.status === "fail") {
+      return pdfResult;
+    }
+    return { status: "success", data: pdfResult.pdfPath };
+  } catch (error2) {
+    console.error("generatePatientPrescriptionPDF error:", error2);
+    return { status: "fail", message: error2.message };
+  }
+}
+async function fillPatientPrescriptionTemplate(patient, prescriptions, doctor, weight) {
+  try {
+    const existingPdfBytes = await fs$2.readFile(doctor.pdfPath);
+    const pdfDoc = await PDFDocument.load(existingPdfBytes);
+    const pages = pdfDoc.getPages();
+    const firstPage = pages[0];
+    const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaFontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const { width, height } = firstPage.getSize();
+    drawPatientInformation(firstPage, patient, helveticaFontBold, helveticaFont, width, height, weight);
+    drawPrescriptions(firstPage, prescriptions, helveticaFontBold, helveticaFont, width, height);
+    const modifiedPdfBytes = await pdfDoc.save();
+    await fs$2.mkdir(PATIENTS_PDF_DIR, { recursive: true });
+    const outputFileName = `prescription_patient_${patient.id}_${Date.now()}.pdf`;
+    const outputPath = path$1.join(PATIENTS_PDF_DIR, outputFileName);
+    await fs$2.writeFile(outputPath, modifiedPdfBytes);
+    return { status: "success", pdfPath: outputPath };
+  } catch (error2) {
+    return { status: "fail", message: error2.message };
+  }
+}
+function drawPatientInformation(page, patient, helveticaFontBold, helveticaFont, width, height, weight) {
+  const dayOfConsultationText = (/* @__PURE__ */ new Date()).toLocaleDateString("en-GB");
+  page.drawText(dayOfConsultationText, {
+    x: 67,
+    y: height - 207,
+    size: 10,
+    font: helveticaFontBold,
+    color: rgb(0, 0, 0)
+  });
+  page.drawText(patient.fullName, {
+    x: 434,
+    y: height - 207,
+    size: 10,
+    font: helveticaFont,
+    color: rgb(0, 0, 0)
+  });
+  page.drawText(patient.dateOfBirth, {
+    x: 486,
+    y: height - 238,
+    size: 10,
+    font: helveticaFontBold,
+    color: rgb(0, 0, 0)
+  });
+  const ageText = `${calculateAge(patient.dateOfBirth).years} ans`;
+  page.drawText(ageText, {
+    x: 400,
+    y: height - 269,
+    size: 10,
+    font: helveticaFontBold,
+    color: rgb(0, 0, 0)
+  });
+  if (weight) {
+    page.drawText(weight, {
+      x: 500,
+      y: height - 269,
+      size: 10,
+      font: helveticaFontBold,
+      color: rgb(0, 0, 0)
+    });
+  }
+}
+function drawPrescriptions(page, prescriptions, helveticaFontBold, helveticaFont, width, height) {
+  const startX = 30;
+  let currentY = height - 315;
+  const lineSpacing = 15;
+  const prescriptionSpacing = 30;
+  prescriptions.forEach((prescription, index) => {
+    const numberPrefix = `${index + 1}. `;
+    const medicineLine = `${numberPrefix}${prescription.medicineName}  —  ${prescription.dosage}`;
+    page.drawText(medicineLine, {
+      x: startX,
+      y: currentY,
+      size: 11,
+      font: helveticaFontBold,
+      color: rgb(0, 0, 0)
+    });
+    currentY -= lineSpacing;
+    const detailsLine = `${prescription.frequency} | Qté: ${prescription.quantity} | Durée: ${prescription.duration}`;
+    page.drawText(detailsLine, {
+      x: startX + 20,
+      y: currentY,
+      size: 9,
+      font: helveticaFont,
+      color: rgb(0.25, 0.25, 0.25)
+    });
+    currentY -= prescriptionSpacing;
+  });
+}
+function calculateAge(birthDate) {
+  const birth = new Date(birthDate);
+  const today = /* @__PURE__ */ new Date();
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+  if (months < 0 || months === 0 && today.getDate() < birth.getDate()) {
+    years--;
+    months += 12;
+  }
+  return { years, months };
 }
 var jws$3 = {};
 var safeBuffer = { exports: {} };
@@ -23368,6 +23500,7 @@ app.whenReady().then(() => {
   ipcMain.handle("delete-prescription", async (_event, id) => await deletePrescription(id));
   ipcMain.handle("search-prescriptions", async (_event, query) => await searchPrescription(query));
   ipcMain.handle("count-prescriptions", async () => await countPrescriptions());
+  ipcMain.handle("generate-patient-prescription-pdf", async (_event, patientId, prescriptions, doctor, weight) => await generatePatientPrescriptionPDF(patientId, prescriptions, doctor, weight));
   ipcMain.handle("create-user", async (_event, user) => await createUser(user));
   ipcMain.handle("login", async (_event, phoneNumber, password, stayLogged) => login(phoneNumber, password, stayLogged));
   ipcMain.handle("check-auth", async () => checkAuth());

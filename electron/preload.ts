@@ -1,6 +1,7 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { Patient } from '../types/patient'
 import type { Prescription } from '../types/doctor'
+import type { DoctorProfile } from '../types/doctor'
 import { PatientDocument } from '../types/documents'
 
 // --------- Expose some API to the Renderer process ---------
@@ -55,6 +56,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   login: (phoneNumber: string, password: string, stayLogged: boolean) => ipcRenderer.invoke('login', phoneNumber, password, stayLogged),
   checkAuth: () => ipcRenderer.invoke('check-auth'),
   logout: () => ipcRenderer.invoke('logout'),
+
+  //Patient prescription
+  generatePatientPrescriptionPDF: (patientId: number, prescriptions: Prescription[], doctor: DoctorProfile, weight?: string) => ipcRenderer.invoke('generate-patient-prescription-pdf', patientId, prescriptions, doctor, weight),
 
 
 })
