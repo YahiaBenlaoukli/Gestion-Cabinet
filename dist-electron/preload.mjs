@@ -36,7 +36,8 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   setPrescriptionPdf: (doctorId) => electron.ipcRenderer.invoke("set-prescription-pdf", doctorId),
   //gestion des prescriptions
   addPrescription: (prescription) => electron.ipcRenderer.invoke("add-prescription", prescription),
-  getPrescriptionById: (id) => electron.ipcRenderer.invoke("get-prescription-by-id", id),
+  getPrescriptionById: (id, patientId) => electron.ipcRenderer.invoke("get-prescription-by-id", id, patientId),
+  getPatientPrescriptions: (patientId) => electron.ipcRenderer.invoke("get-patient-prescriptions", patientId),
   getAllPrescriptions: () => electron.ipcRenderer.invoke("get-all-prescriptions"),
   updatePrescription: (prescription) => electron.ipcRenderer.invoke("update-prescription", prescription),
   deletePrescription: (id) => electron.ipcRenderer.invoke("delete-prescription", id),

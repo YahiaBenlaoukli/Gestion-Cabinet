@@ -28,10 +28,10 @@ export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'upl
 
         const db = getDatabase();
         const stmt = db.prepare(`
-        INSERT INTO patient_documents (patient_id, file_name, file_category, local_path)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO patient_documents (patient_id, prescription_id, file_name, file_category, local_path)
+        VALUES (?, ?, ?, ?, ?)
     `);
-        const result = stmt.run(document.patientId, uniqueFilename, document.fileCategory, localPath);
+        const result = stmt.run(document.patientId, document.prescriptionId ?? null, uniqueFilename, document.fileCategory, localPath);
         return {
             ...document,
             localPath,
@@ -50,10 +50,11 @@ export function getDocumentsByPatientId(patientId: number): PatientDocument[] {
         const stmt = db.prepare(`
         SELECT * FROM patient_documents WHERE patient_id = ?
     `);
-        const rows = stmt.all(patientId) as { id: number; patient_id: number; file_name: string; file_category: string; local_path: string; upload_date: string }[];
+        const rows = stmt.all(patientId) as { id: number; patient_id: number; prescription_id: number | null; file_name: string; file_category: string; local_path: string; upload_date: string }[];
         return rows.map(row => ({
             id: row.id,
             patientId: row.patient_id,
+            prescriptionId: row.prescription_id,
             fileName: row.file_name,
             fileCategory: row.file_category,
             localPath: row.local_path,

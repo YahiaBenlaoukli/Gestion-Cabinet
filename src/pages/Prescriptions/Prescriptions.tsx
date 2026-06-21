@@ -103,6 +103,8 @@ export default function Prescriptions() {
 
     /* ── Patient's existing prescriptions ── */
     const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+    const [prescriptionPage, setPrescriptionPage] = useState(0);
+    const ROWS_PER_PAGE = 5;
 
     /* ── PDF generation ── */
     const [isGeneratingPatientPdf, setIsGeneratingPatientPdf] = useState(false);
@@ -211,14 +213,10 @@ export default function Prescriptions() {
     /* ── Patient selection ── */
     const loadPatientPrescriptions = async (patientId: number) => {
         try {
-            const result = await (window as any).ipcRenderer.invoke('get-all-prescriptions');
+            const result = await (window as any).ipcRenderer.getPatientPrescriptions(patientId);
             if (result.status === 'success') {
-                const filtered = (result.data || []).filter((p: Prescription) => p.patientId === patientId);
-                // Sort by most recent first
-                filtered.sort((a: Prescription, b: Prescription) =>
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
-                setPatientPrescriptions(filtered);
+                setPatientPrescriptions(result.data || []);
+                setPrescriptionPage(0);
             }
         } catch (e) {
             console.error('Error loading prescriptions:', e);
@@ -242,6 +240,7 @@ export default function Prescriptions() {
         setShowPatientDropdown(false);
         setNewMedications([]);
         setPatientPrescriptions([]);
+        setPrescriptionPage(0);
         setWeight('');
     };
 
@@ -763,27 +762,53 @@ export default function Prescriptions() {
                                         <p className="text-xs text-navy/25">Les ordonnances enregistrées pour ce patient apparaîtront ici</p>
                                     </div>
                                 ) : (
-                                    <div className="divide-y divide-navy/[0.04]">
-                                        {patientPrescriptions.map(presc => (
-                                            <div key={presc.id} className="flex items-center gap-3 px-5 py-3.5 group hover:bg-navy/[0.015] transition-colors">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-pink/60 flex-shrink-0" />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-navy">{presc.medicineName}</p>
-                                                    <p className="text-[11px] text-navy/40">
-                                                        {[presc.dosage, presc.quantity, presc.frequency, presc.duration].filter(Boolean).join(' • ')}
-                                                    </p>
+                                    <>
+                                        <div className="divide-y divide-navy/[0.04]">
+                                            {patientPrescriptions.slice(prescriptionPage * ROWS_PER_PAGE, (prescriptionPage + 1) * ROWS_PER_PAGE).map(presc => (
+                                                <div key={presc.id} className="flex items-center gap-3 px-5 py-3.5 group hover:bg-navy/[0.015] transition-colors">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-pink/60 flex-shrink-0" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-navy">{presc.medicineName}</p>
+                                                        <p className="text-[11px] text-navy/40">
+                                                            {[presc.dosage, presc.quantity, presc.frequency, presc.duration].filter(Boolean).join(' • ')}
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-[10px] text-navy/25 flex-shrink-0">{formatDate(presc.createdAt)}</span>
+                                                    <button
+                                                        onClick={() => handleDeletePrescription(presc.id)}
+                                                        className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                                                        title="Supprimer"
+                                                    >
+                                                        {icons.trash}
+                                                    </button>
                                                 </div>
-                                                <span className="text-[10px] text-navy/25 flex-shrink-0">{formatDate(presc.createdAt)}</span>
-                                                <button
-                                                    onClick={() => handleDeletePrescription(presc.id)}
-                                                    className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-                                                    title="Supprimer"
-                                                >
-                                                    {icons.trash}
-                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Pagination */}
+                                        {patientPrescriptions.length > ROWS_PER_PAGE && (
+                                            <div className="px-5 py-3 border-t border-navy/[0.06] flex items-center justify-between">
+                                                <span className="text-xs text-navy/35">
+                                                    {prescriptionPage * ROWS_PER_PAGE + 1}–{Math.min((prescriptionPage + 1) * ROWS_PER_PAGE, patientPrescriptions.length)} sur {patientPrescriptions.length}
+                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        onClick={() => setPrescriptionPage(p => p - 1)}
+                                                        disabled={prescriptionPage === 0}
+                                                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        ← Précédent
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setPrescriptionPage(p => p + 1)}
+                                                        disabled={(prescriptionPage + 1) * ROWS_PER_PAGE >= patientPrescriptions.length}
+                                                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    >
+                                                        Suivant →
+                                                    </button>
+                                                </div>
                                             </div>
-                                        ))}
-                                    </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </>

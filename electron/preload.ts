@@ -44,7 +44,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   setPrescriptionPdf: (doctorId: number) => ipcRenderer.invoke('set-prescription-pdf', doctorId),
   //gestion des prescriptions
   addPrescription: (prescription: Prescription) => ipcRenderer.invoke('add-prescription', prescription),
-  getPrescriptionById: (id: number) => ipcRenderer.invoke('get-prescription-by-id', id),
+  getPrescriptionById: (id: number, patientId: number) => ipcRenderer.invoke('get-prescription-by-id', id, patientId),
+  getPatientPrescriptions: (patientId: number) => ipcRenderer.invoke('get-patient-prescriptions', patientId),
   getAllPrescriptions: () => ipcRenderer.invoke('get-all-prescriptions'),
   updatePrescription: (prescription: Prescription) => ipcRenderer.invoke('update-prescription', prescription),
   deletePrescription: (id: number) => ipcRenderer.invoke('delete-prescription', id),

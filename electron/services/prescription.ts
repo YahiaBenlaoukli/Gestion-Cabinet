@@ -5,6 +5,9 @@ import path from "node:path";
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import type { DoctorProfile, Prescription } from "../../types/doctor";
 
+import { uploadDocument, getDocumentsByPatientId } from "./documents";
+
+
 import { fileURLToPath } from "node:url";
 import type { Patient } from "../../types/patient";
 
@@ -198,14 +201,38 @@ export function getAllPrescriptions() {
     }
 }
 
-export function getPrescriptionById(id: number) {
+export function getPatientPrescriptions(patientId: number) {
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`SELECT * FROM prescriptions WHERE id = ?`);
-        const result = stmt.get(id);
+        const stmt = db.prepare(`SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC`);
+        const result = stmt.all(patientId);
         return { status: "success", data: result };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
+    }
+}
+
+export function getPrescriptionById(id: number, patientId: number) {
+    try {
+        const db = getDatabase();
+
+        // Get the prescription medicines from the prescriptions table
+        const prescriptionStmt = db.prepare(`SELECT * FROM prescriptions WHERE id = ? AND patient_id = ?`);
+        const prescription = prescriptionStmt.get(id, patientId);
+        if (!prescription) {
+            return { status: "fail", message: "Prescription not found" };
+        }
+
+        // Get documents linked to this specific prescription, or all prescription docs for this patient
+        const allDocs = getDocumentsByPatientId(patientId);
+        const linkedDocs = allDocs.filter(doc => doc.prescriptionId === id);
+        const documents = linkedDocs.length > 0
+            ? linkedDocs
+            : allDocs.filter(doc => doc.fileCategory === "prescription");
+
+        return { status: "success", data: { prescription, documents } };
+    } catch (error) {
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -315,6 +342,13 @@ async function fillPatientPrescriptionTemplate(
         const outputFileName = `prescription_patient_${patient.id}_${Date.now()}.pdf`;
         const outputPath = path.join(PATIENTS_PDF_DIR, outputFileName);
         await fs.writeFile(outputPath, modifiedPdfBytes);
+
+        await uploadDocument({
+            patientId: patient.id,
+            fileCategory: "prescription",
+            localPath: outputPath,
+            fileName: outputFileName,
+        });
 
         return { status: "success", pdfPath: outputPath };
     } catch (error) {

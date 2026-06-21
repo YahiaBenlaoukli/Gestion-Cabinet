@@ -39,11 +39,13 @@ function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS patient_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    prescription_id INTEGER,
     file_name TEXT NOT NULL,
     file_category TEXT,
     local_path TEXT NOT NULL,
     upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+    FOREIGN KEY (prescription_id) REFERENCES prescriptions(id) ON DELETE SET NULL
     );
     CREATE TABLE IF NOT EXISTS doctor_profile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,15 +74,21 @@ function initializeDatabase() {
     );
   `);
   if (version === 0) {
-    db.pragma("user_version = 3");
+    db.pragma("user_version = 4");
   }
   if (version === 1) {
     db.exec(`ALTER TABLE doctor_profile ADD COLUMN email TEXT`);
-    db.pragma("user_version = 3");
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma("user_version = 4");
   }
   if (version === 2) {
     db.exec(`ALTER TABLE prescriptions ADD COLUMN quantity TEXT`);
-    db.pragma("user_version = 3");
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma("user_version = 4");
+  }
+  if (version === 3) {
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma("user_version = 4");
   }
   return db;
 }
@@ -211,10 +219,10 @@ async function uploadDocument(document) {
     await fs$1.promises.copyFile(document.localPath, localPath);
     const db2 = getDatabase();
     const stmt = db2.prepare(`
-        INSERT INTO patient_documents (patient_id, file_name, file_category, local_path)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO patient_documents (patient_id, prescription_id, file_name, file_category, local_path)
+        VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(document.patientId, uniqueFilename, document.fileCategory, localPath);
+    const result = stmt.run(document.patientId, document.prescriptionId ?? null, uniqueFilename, document.fileCategory, localPath);
     return {
       ...document,
       localPath,
@@ -236,6 +244,7 @@ function getDocumentsByPatientId(patientId) {
     return rows.map((row) => ({
       id: row.id,
       patientId: row.patient_id,
+      prescriptionId: row.prescription_id,
       fileName: row.file_name,
       fileCategory: row.file_category,
       localPath: row.local_path,
@@ -19449,14 +19458,30 @@ function getAllPrescriptions() {
     return { status: "fail", message: error2 };
   }
 }
-function getPrescriptionById(id) {
+function getPatientPrescriptions(patientId) {
   try {
     const db2 = getDatabase();
-    const stmt = db2.prepare(`SELECT * FROM prescriptions WHERE id = ?`);
-    const result = stmt.get(id);
+    const stmt = db2.prepare(`SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC`);
+    const result = stmt.all(patientId);
     return { status: "success", data: result };
   } catch (error2) {
-    return { status: "fail", message: error2 };
+    return { status: "fail", message: error2.message };
+  }
+}
+function getPrescriptionById(id, patientId) {
+  try {
+    const db2 = getDatabase();
+    const prescriptionStmt = db2.prepare(`SELECT * FROM prescriptions WHERE id = ? AND patient_id = ?`);
+    const prescription = prescriptionStmt.get(id, patientId);
+    if (!prescription) {
+      return { status: "fail", message: "Prescription not found" };
+    }
+    const allDocs = getDocumentsByPatientId(patientId);
+    const linkedDocs = allDocs.filter((doc) => doc.prescriptionId === id);
+    const documents = linkedDocs.length > 0 ? linkedDocs : allDocs.filter((doc) => doc.fileCategory === "prescription");
+    return { status: "success", data: { prescription, documents } };
+  } catch (error2) {
+    return { status: "fail", message: error2.message };
   }
 }
 function updatePrescription(prescription) {
@@ -19548,6 +19573,12 @@ async function fillPatientPrescriptionTemplate(patient, prescriptions, doctor, w
     const outputFileName = `prescription_patient_${patient.id}_${Date.now()}.pdf`;
     const outputPath = path$1.join(PATIENTS_PDF_DIR, outputFileName);
     await fs$2.writeFile(outputPath, modifiedPdfBytes);
+    await uploadDocument({
+      patientId: patient.id,
+      fileCategory: "prescription",
+      localPath: outputPath,
+      fileName: outputFileName
+    });
     return { status: "success", pdfPath: outputPath };
   } catch (error2) {
     return { status: "fail", message: error2.message };
@@ -23493,8 +23524,9 @@ app.whenReady().then(() => {
   ipcMain.handle("create-doctor-profile", async (_event, userId, fullName, speciality, phoneNumber, address, email) => await createDoctorProfile(userId, fullName, speciality, phoneNumber, address, email));
   ipcMain.handle("get-doctor-profile", async (_event, userId) => getDoctorProfileByUserId(userId));
   ipcMain.handle("set-prescription-pdf", async (_event, doctorId) => await setPrescriptionPdf(doctorId));
-  ipcMain.handle("add-prescription", async (_event, userId, patientId, medicineName, dosage, frequency, duration) => await addPrescription(userId, patientId, medicineName, dosage, frequency, duration));
-  ipcMain.handle("get-prescription-by-id", async (_event, id) => await getPrescriptionById(id));
+  ipcMain.handle("add-prescription", async (_event, userId, patientId, medicineName, dosage, frequency, quantity, duration) => await addPrescription(userId, patientId, medicineName, dosage, frequency, quantity, duration));
+  ipcMain.handle("get-prescription-by-id", async (_event, id, patientId) => getPrescriptionById(id, patientId));
+  ipcMain.handle("get-patient-prescriptions", async (_event, patientId) => getPatientPrescriptions(patientId));
   ipcMain.handle("get-all-prescriptions", async () => await getAllPrescriptions());
   ipcMain.handle("update-prescription", async (_event, prescription) => await updatePrescription(prescription));
   ipcMain.handle("delete-prescription", async (_event, id) => await deletePrescription(id));

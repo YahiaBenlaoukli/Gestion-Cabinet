@@ -32,11 +32,13 @@ export function initializeDatabase(): Database.Database {
     CREATE TABLE IF NOT EXISTS patient_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    prescription_id INTEGER,
     file_name TEXT NOT NULL,
     file_category TEXT,
     local_path TEXT NOT NULL,
     upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+    FOREIGN KEY (prescription_id) REFERENCES prescriptions(id) ON DELETE SET NULL
     );
     CREATE TABLE IF NOT EXISTS doctor_profile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,19 +68,27 @@ export function initializeDatabase(): Database.Database {
   `);
 
   if (version === 0) {
-    db.pragma('user_version = 3');
+    db.pragma('user_version = 4');
   }
 
   // Migration: v1 → v2 — add email column to doctor_profile
   if (version === 1) {
     db.exec(`ALTER TABLE doctor_profile ADD COLUMN email TEXT`);
-    db.pragma('user_version = 3');
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma('user_version = 4');
   }
 
   // Migration: v2 → v3 — add quantity column to prescriptions
   if (version === 2) {
     db.exec(`ALTER TABLE prescriptions ADD COLUMN quantity TEXT`);
-    db.pragma('user_version = 3');
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma('user_version = 4');
+  }
+
+  // Migration: v3 → v4 — add prescription_id column to patient_documents
+  if (version === 3) {
+    db.exec(`ALTER TABLE patient_documents ADD COLUMN prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE SET NULL`);
+    db.pragma('user_version = 4');
   }
 
   return db;
