@@ -66,6 +66,56 @@ export function getDocumentsByPatientId(patientId: number): PatientDocument[] {
     }
 }
 
+export function getAllDocuments() {
+    try {
+        const db = getDatabase();
+        const stmt = db.prepare(`
+            SELECT d.*, p.full_name as patient_name, p.phone_number as patient_phone
+            FROM patient_documents d
+            JOIN patients p ON d.patient_id = p.id
+            ORDER BY d.upload_date DESC
+        `);
+        const rows = stmt.all() as { 
+            id: number; 
+            patient_id: number; 
+            prescription_id: number | null; 
+            file_name: string; 
+            file_category: string; 
+            local_path: string; 
+            upload_date: string;
+            patient_name: string;
+            patient_phone: string | null;
+        }[];
+
+        return rows.map(row => {
+            let fileSize = 0;
+            try {
+                if (fs.existsSync(row.local_path)) {
+                    fileSize = fs.statSync(row.local_path).size;
+                }
+            } catch (err) {
+                console.log(err);
+            }
+            return {
+                id: row.id,
+                patientId: row.patient_id,
+                prescriptionId: row.prescription_id,
+                fileName: row.file_name,
+                fileCategory: row.file_category,
+                localPath: row.local_path,
+                uploadDate: row.upload_date,
+                patientName: row.patient_name,
+                patientPhone: row.patient_phone,
+                fileSize,
+            };
+        });
+    } catch (error) {
+        console.log(error);
+        return [];
+    }
+}
+
+
 export function deleteDocument(id: number): void {
     try {
         const db = getDatabase();

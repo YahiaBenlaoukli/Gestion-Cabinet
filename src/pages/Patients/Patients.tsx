@@ -611,8 +611,67 @@ function AddPatientModal({
         bloodType: '' as string,
     })
 
+    const [errors, setErrors] = useState({
+        fullName: '',
+        phoneNumber: '',
+        ssn: '',
+    })
+
+    // Allows letters (any script including Arabic), spaces, hyphens, apostrophes
+    const isValidName = (name: string) => /^[\p{L}\s\-']+$/u.test(name)
+
+    const validateField = (field: string, value: string) => {
+        switch (field) {
+            case 'fullName': {
+                if (value && !isValidName(value)) {
+                    return t('patients.modal.error_name_invalid')
+                }
+                return ''
+            }
+            case 'phoneNumber': {
+                const digits = value.replace(/\D/g, '')
+                if (digits.length > 0 && digits.length !== 10) {
+                    return t('patients.modal.error_phone_length')
+                }
+                return ''
+            }
+            case 'ssn': {
+                const digits = value.replace(/\D/g, '')
+                if (digits.length > 0 && digits.length !== 18) {
+                    return t('patients.modal.error_ssn_length')
+                }
+                return ''
+            }
+            default:
+                return ''
+        }
+    }
+
+    const handleChange = (field: string, value: string) => {
+        let processedValue = value
+
+        // For phone and SSN, strip non-digit characters
+        if (field === 'phoneNumber') {
+            processedValue = value.replace(/\D/g, '').slice(0, 10)
+        } else if (field === 'ssn') {
+            processedValue = value.replace(/\D/g, '').slice(0, 18)
+        }
+
+        setForm(f => ({ ...f, [field]: processedValue }))
+        setErrors(e => ({ ...e, [field]: validateField(field, processedValue) }))
+    }
+
+    const hasErrors = () => {
+        const nameErr = validateField('fullName', form.fullName)
+        const phoneErr = validateField('phoneNumber', form.phoneNumber)
+        const ssnErr = validateField('ssn', form.ssn)
+        setErrors({ fullName: nameErr, phoneNumber: phoneErr, ssn: ssnErr })
+        return !!(nameErr || phoneErr || ssnErr)
+    }
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
+        if (hasErrors()) return
         onSave({
             ...form,
             bloodType: form.bloodType ? (form.bloodType as BloodType) : null,
@@ -621,6 +680,9 @@ function AddPatientModal({
 
     const inputClass =
         'w-full px-4 py-2.5 text-sm bg-navy/[0.02] border border-navy/[0.08] rounded-xl text-navy placeholder:text-navy/25 focus:outline-none focus:ring-2 focus:ring-pink/20 focus:border-pink/30 transition-all duration-200'
+
+    const inputErrorClass =
+        'w-full px-4 py-2.5 text-sm bg-red-50/30 border border-red-300 rounded-xl text-navy placeholder:text-navy/25 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 transition-all duration-200'
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -647,10 +709,13 @@ function AddPatientModal({
                         <input
                             required
                             value={form.fullName}
-                            onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
+                            onChange={e => handleChange('fullName', e.target.value)}
                             placeholder={t('patients.modal.full_name_placeholder')}
-                            className={inputClass}
+                            className={errors.fullName ? inputErrorClass : inputClass}
                         />
+                        {errors.fullName && (
+                            <p className="text-[11px] text-red-500 mt-1">{errors.fullName}</p>
+                        )}
                     </div>
 
                     {/* Date of birth + Blood type */}
@@ -685,19 +750,27 @@ function AddPatientModal({
                             <label className="block text-xs font-semibold text-navy/50 mb-1.5">{t('patients.modal.phone')}</label>
                             <input
                                 value={form.phoneNumber}
-                                onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
+                                onChange={e => handleChange('phoneNumber', e.target.value)}
                                 placeholder={t('patients.modal.phone_placeholder')}
-                                className={inputClass}
+                                maxLength={10}
+                                className={errors.phoneNumber ? inputErrorClass : inputClass}
                             />
+                            {errors.phoneNumber && (
+                                <p className="text-[11px] text-red-500 mt-1">{errors.phoneNumber}</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-navy/50 mb-1.5">{t('patients.modal.ssn')}</label>
                             <input
                                 value={form.ssn}
-                                onChange={e => setForm(f => ({ ...f, ssn: e.target.value }))}
+                                onChange={e => handleChange('ssn', e.target.value)}
                                 placeholder={t('patients.modal.ssn_placeholder')}
-                                className={inputClass}
+                                maxLength={18}
+                                className={errors.ssn ? inputErrorClass : inputClass}
                             />
+                            {errors.ssn && (
+                                <p className="text-[11px] text-red-500 mt-1">{errors.ssn}</p>
+                            )}
                         </div>
                     </div>
 

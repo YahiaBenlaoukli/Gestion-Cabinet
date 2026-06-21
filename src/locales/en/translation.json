@@ -73,7 +73,7 @@
       "title": "New Patient",
       "subtitle": "Fill in the patient's information.",
       "full_name": "Full Name *",
-      "full_name_placeholder": "e.g. John Doe",
+      "full_name_placeholder": "e.g. Mohammed Benlaoukli",
       "dob": "Date of Birth",
       "blood_type": "Blood Type",
       "blood_type_unspecified": "— Unspecified —",
@@ -84,7 +84,10 @@
       "address": "Address",
       "address_placeholder": "Street, city, postal code",
       "cancel": "Cancel",
-      "save": "Save"
+      "save": "Save",
+      "error_name_invalid": "Name can only contain letters, spaces, hyphens, and apostrophes",
+      "error_phone_length": "Phone number must be exactly 10 digits",
+      "error_ssn_length": "SSN must be exactly 18 digits"
     },
     "selected_bar": {
       "delete": "Delete",

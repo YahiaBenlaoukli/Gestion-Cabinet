@@ -106,15 +106,29 @@ export async function setPrescriptionPdf(doctorId: number) {
     }
 }
 
-export function addPrescription(userId: number, patientId: number, medicineName: string, dosage: string, frequency: string, quantity: string, duration: string) {
+export function addPrescription(userId: number, patientId: number, medicines: { medicineName: string; dosage: string; frequency: string; quantity: string; duration: string }[], notes?: string) {
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`
-            INSERT INTO prescriptions (user_id, patient_id, medicine_name, dosage, frequency, quantity, duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+        const insertPrescription = db.prepare(`
+            INSERT INTO prescriptions (user_id, patient_id, notes)
+            VALUES (?, ?, ?)
         `);
-        const result = stmt.run(userId, patientId, medicineName, dosage, frequency, quantity, duration);
-        return { status: "success", data: result };
+        const insertMedicine = db.prepare(`
+            INSERT INTO prescription_medicines (prescription_id, medicine_name, dosage, frequency, duration, quantity)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        const transaction = db.transaction(() => {
+            const result = insertPrescription.run(userId, patientId, notes || null);
+            const prescriptionId = result.lastInsertRowid as number;
+            for (const med of medicines) {
+                insertMedicine.run(prescriptionId, med.medicineName, med.dosage, med.frequency, med.duration, med.quantity);
+            }
+            return prescriptionId;
+        });
+
+        const prescriptionId = transaction();
+        return { status: "success", data: { prescriptionId } };
     } catch (error) {
         console.error("addPrescription error:", error);
         return { status: "fail", message: (error as Error).message };
@@ -190,14 +204,38 @@ async function fillTemplate(
     }
 }
 
+// Helper: hydrate a prescription row with its medicines
+function hydratePrescription(db: ReturnType<typeof getDatabase>, prescriptionRow: Record<string, unknown>): Prescription {
+    const medicinesStmt = db.prepare(`SELECT * FROM prescription_medicines WHERE prescription_id = ? ORDER BY id`);
+    const medicineRows = medicinesStmt.all(prescriptionRow.id as number) as Record<string, unknown>[];
+    return {
+        id: prescriptionRow.id as number,
+        userId: prescriptionRow.user_id as number,
+        patientId: prescriptionRow.patient_id as number,
+        notes: prescriptionRow.notes as string | null,
+        medicines: medicineRows.map(m => ({
+            id: m.id as number,
+            prescriptionId: m.prescription_id as number,
+            medicineName: m.medicine_name as string,
+            dosage: m.dosage as string,
+            frequency: m.frequency as string,
+            duration: m.duration as string,
+            quantity: m.quantity as string,
+            createdAt: m.created_at as string,
+        })),
+        createdAt: prescriptionRow.created_at as string,
+    };
+}
+
 export function getAllPrescriptions() {
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`SELECT * FROM prescriptions`);
-        const result = stmt.all();
+        const stmt = db.prepare(`SELECT * FROM prescriptions ORDER BY created_at DESC`);
+        const rows = stmt.all() as Record<string, unknown>[];
+        const result = rows.map(row => hydratePrescription(db, row));
         return { status: "success", data: result };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -205,7 +243,8 @@ export function getPatientPrescriptions(patientId: number) {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC`);
-        const result = stmt.all(patientId);
+        const rows = stmt.all(patientId) as Record<string, unknown>[];
+        const result = rows.map(row => hydratePrescription(db, row));
         return { status: "success", data: result };
     } catch (error) {
         return { status: "fail", message: (error as Error).message };
@@ -216,12 +255,13 @@ export function getPrescriptionById(id: number, patientId: number) {
     try {
         const db = getDatabase();
 
-        // Get the prescription medicines from the prescriptions table
         const prescriptionStmt = db.prepare(`SELECT * FROM prescriptions WHERE id = ? AND patient_id = ?`);
-        const prescription = prescriptionStmt.get(id, patientId);
-        if (!prescription) {
+        const row = prescriptionStmt.get(id, patientId) as Record<string, unknown> | undefined;
+        if (!row) {
             return { status: "fail", message: "Prescription not found" };
         }
+
+        const prescription = hydratePrescription(db, row);
 
         // Get documents linked to this specific prescription, or all prescription docs for this patient
         const allDocs = getDocumentsByPatientId(patientId);
@@ -239,24 +279,43 @@ export function getPrescriptionById(id: number, patientId: number) {
 export function updatePrescription(prescription: Prescription) {
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`
-            UPDATE prescriptions SET user_id = ?, patient_id = ?, medicine_name = ?, dosage = ?, frequency = ?, duration = ? WHERE id = ?
-        `);
-        const result = stmt.run(prescription.userId, prescription.patientId, prescription.medicineName, prescription.dosage, prescription.frequency, prescription.duration, prescription.id);
-        return { status: "success", data: result };
+
+        const transaction = db.transaction(() => {
+            // Update the prescription header
+            const updateHeader = db.prepare(`
+                UPDATE prescriptions SET user_id = ?, patient_id = ?, notes = ? WHERE id = ?
+            `);
+            updateHeader.run(prescription.userId, prescription.patientId, prescription.notes, prescription.id);
+
+            // Delete old medicines and re-insert
+            const deleteMeds = db.prepare(`DELETE FROM prescription_medicines WHERE prescription_id = ?`);
+            deleteMeds.run(prescription.id);
+
+            const insertMed = db.prepare(`
+                INSERT INTO prescription_medicines (prescription_id, medicine_name, dosage, frequency, duration, quantity)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            for (const med of prescription.medicines) {
+                insertMed.run(prescription.id, med.medicineName, med.dosage, med.frequency, med.duration, med.quantity);
+            }
+        });
+
+        transaction();
+        return { status: "success", data: { prescriptionId: prescription.id } };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
 export function deletePrescription(id: number) {
     try {
         const db = getDatabase();
+        // ON DELETE CASCADE will remove prescription_medicines automatically
         const stmt = db.prepare(`DELETE FROM prescriptions WHERE id = ?`);
         const result = stmt.run(id);
         return { status: "success", data: result };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -264,11 +323,18 @@ export function deletePrescription(id: number) {
 export async function searchPrescription(query: string) {
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`SELECT * FROM prescriptions WHERE medicine_name LIKE ? OR dosage LIKE ? OR frequency LIKE ? OR duration LIKE ?`);
-        const result = stmt.all(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
+        // Search across prescription_medicines and return the parent prescriptions
+        const stmt = db.prepare(`
+            SELECT DISTINCT p.* FROM prescriptions p
+            LEFT JOIN prescription_medicines pm ON pm.prescription_id = p.id
+            WHERE pm.medicine_name LIKE ? OR pm.dosage LIKE ? OR pm.frequency LIKE ? OR pm.duration LIKE ? OR p.notes LIKE ?
+            ORDER BY p.created_at DESC
+        `);
+        const rows = stmt.all(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`) as Record<string, unknown>[];
+        const result = rows.map(row => hydratePrescription(db, row));
         return { status: "success", data: result };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -276,10 +342,10 @@ export async function countPrescriptions() {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`SELECT COUNT(*) as count FROM prescriptions`);
-        const result = stmt.get();
+        const result = stmt.get() as Record<string, unknown>;
         return { status: "success", data: result.count };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -306,7 +372,9 @@ export async function generatePatientPrescriptionPDF(patientId: number, prescrip
             return { status: "fail", message: "Patient not found" };
         }
         const patient = mapRowToPatient(patientResult);
-        const pdfResult = await fillPatientPrescriptionTemplate(patient, prescriptions, doctor, weight);
+        // Use the first prescription's ID to link the document
+        const prescriptionId = prescriptions.length > 0 ? prescriptions[0].id : undefined;
+        const pdfResult = await fillPatientPrescriptionTemplate(patient, prescriptions, doctor, weight, prescriptionId);
         if (pdfResult.status === "fail") {
             return pdfResult;
         }
@@ -322,7 +390,8 @@ async function fillPatientPrescriptionTemplate(
     patient: Patient,
     prescriptions: Prescription[],
     doctor: DoctorProfile,
-    weight?: string
+    weight?: string,
+    prescriptionId?: number
 ): Promise<{ status: "success"; pdfPath: string } | { status: "fail"; message: string }> {
     try {
         const existingPdfBytes = await fs.readFile(doctor.pdfPath!);
@@ -345,6 +414,7 @@ async function fillPatientPrescriptionTemplate(
 
         await uploadDocument({
             patientId: patient.id,
+            prescriptionId: prescriptionId ?? null,
             fileCategory: "prescription",
             localPath: outputPath,
             fileName: outputFileName,
@@ -404,29 +474,33 @@ function drawPrescriptions(page: PDFPage, prescriptions: Prescription[], helveti
     const lineSpacing = 15;
     const prescriptionSpacing = 30;
 
-    prescriptions.forEach((prescription, index) => {
-        const numberPrefix = `${index + 1}. `;
-        const medicineLine = `${numberPrefix}${prescription.medicineName}  —  ${prescription.dosage}`;
+    let medIndex = 1;
+    for (const prescription of prescriptions) {
+        for (const med of prescription.medicines) {
+            const numberPrefix = `${medIndex}. `;
+            const medicineLine = `${numberPrefix}${med.medicineName}  —  ${med.dosage}`;
 
-        page.drawText(medicineLine, {
-            x: startX,
-            y: currentY,
-            size: 11,
-            font: helveticaFontBold,
-            color: rgb(0, 0, 0),
-        });
-        currentY -= lineSpacing;
+            page.drawText(medicineLine, {
+                x: startX,
+                y: currentY,
+                size: 11,
+                font: helveticaFontBold,
+                color: rgb(0, 0, 0),
+            });
+            currentY -= lineSpacing;
 
-        const detailsLine = `${prescription.frequency} | Qté: ${prescription.quantity} | Durée: ${prescription.duration}`;
-        page.drawText(detailsLine, {
-            x: startX + 20,
-            y: currentY,
-            size: 9,
-            font: helveticaFont,
-            color: rgb(0.25, 0.25, 0.25),
-        });
-        currentY -= prescriptionSpacing;
-    });
+            const detailsLine = `${med.frequency} | Qté: ${med.quantity} | Durée: ${med.duration}`;
+            page.drawText(detailsLine, {
+                x: startX + 20,
+                y: currentY,
+                size: 9,
+                font: helveticaFont,
+                color: rgb(0.25, 0.25, 0.25),
+            });
+            currentY -= prescriptionSpacing;
+            medIndex++;
+        }
+    }
 }
 
 function calculateAge(birthDate: string): { years: number; months: number } {

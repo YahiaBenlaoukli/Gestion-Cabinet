@@ -84,7 +84,10 @@
       "address": "Adresse",
       "address_placeholder": "Rue, ville, code postal",
       "cancel": "Annuler",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "error_name_invalid": "Le nom ne peut contenir que des lettres, espaces, tirets et apostrophes",
+      "error_phone_length": "Le numéro de téléphone doit contenir exactement 10 chiffres",
+      "error_ssn_length": "Le numéro de sécurité sociale doit contenir exactement 18 chiffres"
     },
     "selected_bar": {
       "delete": "Supprimer",

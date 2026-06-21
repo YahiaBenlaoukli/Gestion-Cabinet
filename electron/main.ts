@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { initializeDatabase } from './db/db'
 import { addPatient, getPatient, getAllPatients, updatePatient, deletePatient, searchPatients, countPatients } from './services/patient'
-import { uploadDocument, getDocumentsByPatientId, deleteDocument, openDocument } from './services/documents'
+import { uploadDocument, getDocumentsByPatientId, getAllDocuments, deleteDocument, openDocument } from './services/documents'
 import { addPrescription, getPrescriptionById, getPatientPrescriptions, getAllPrescriptions, updatePrescription, deletePrescription, searchPrescription, countPrescriptions, createDoctorProfile, getDoctorProfileByUserId, setPrescriptionPdf, generatePatientPrescriptionPDF } from './services/prescription'
 import { createUser, login, checkAuth, logout } from './services/auth'
 
@@ -79,6 +79,7 @@ app.whenReady().then(() => {
   ipcMain.handle('count-patients', async () => await countPatients());
   //gestion des documents
   ipcMain.handle('get-documents-by-patient-id', async (_event, patientId) => getDocumentsByPatientId(patientId));
+  ipcMain.handle('get-all-documents', async () => getAllDocuments());
   ipcMain.handle('upload-document', async (_event, document) => await uploadDocument(document));
   ipcMain.handle('delete-document', async (_event, id) => deleteDocument(id));
   ipcMain.handle('open-document', async (_event, path) => await openDocument(path));
@@ -87,7 +88,7 @@ app.whenReady().then(() => {
   ipcMain.handle('get-doctor-profile', async (_event, userId) => getDoctorProfileByUserId(userId));
   ipcMain.handle('set-prescription-pdf', async (_event, doctorId) => await setPrescriptionPdf(doctorId));
   //gestion des prescriptions 
-  ipcMain.handle('add-prescription', async (_event, userId, patientId, medicineName, dosage, frequency, quantity, duration) => await addPrescription(userId, patientId, medicineName, dosage, frequency, quantity, duration));
+  ipcMain.handle('add-prescription', async (_event, userId, patientId, medicines, notes) => await addPrescription(userId, patientId, medicines, notes));
   ipcMain.handle('get-prescription-by-id', async (_event, id, patientId) => getPrescriptionById(id, patientId));
   ipcMain.handle('get-patient-prescriptions', async (_event, patientId) => getPatientPrescriptions(patientId));
   ipcMain.handle('get-all-prescriptions', async () => await getAllPrescriptions());

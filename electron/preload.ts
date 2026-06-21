@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   //gestion documents
   uploadDocument: (document: Omit<PatientDocument, 'id' | 'uploadDate'>) => ipcRenderer.invoke('upload-document', document),
   getDocumentsByPatientId: (patientId: number) => ipcRenderer.invoke('get-documents-by-patient-id', patientId),
+  getAllDocuments: () => ipcRenderer.invoke('get-all-documents'),
   deleteDocument: (id: number) => ipcRenderer.invoke('delete-document', id),
   openDocument: (path: string) => ipcRenderer.invoke('open-document', path),
   //gestion profil médecin
@@ -43,7 +44,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getDoctorProfile: (userId: number) => ipcRenderer.invoke('get-doctor-profile', userId),
   setPrescriptionPdf: (doctorId: number) => ipcRenderer.invoke('set-prescription-pdf', doctorId),
   //gestion des prescriptions
-  addPrescription: (prescription: Prescription) => ipcRenderer.invoke('add-prescription', prescription),
+  addPrescription: (userId: number, patientId: number, medicines: { medicineName: string; dosage: string; frequency: string; quantity: string; duration: string }[], notes?: string) => ipcRenderer.invoke('add-prescription', userId, patientId, medicines, notes),
   getPrescriptionById: (id: number, patientId: number) => ipcRenderer.invoke('get-prescription-by-id', id, patientId),
   getPatientPrescriptions: (patientId: number) => ipcRenderer.invoke('get-patient-prescriptions', patientId),
   getAllPrescriptions: () => ipcRenderer.invoke('get-all-prescriptions'),

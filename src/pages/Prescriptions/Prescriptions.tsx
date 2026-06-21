@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DoctorProfile, Prescription } from '../../../types/doctor';
 import type { Patient } from '../../../types/patient';
+import type { PatientDocument } from '../../../types/documents';
 
 /* ─── Types ─── */
 type Step = 'loading' | 'create-profile' | 'generate-pdf' | 'prescriptions';
@@ -74,6 +75,19 @@ function formatDate(dateStr: string) {
     } catch { return dateStr; }
 }
 
+function formatDateGroup(dateStr: string) {
+    if (!dateStr) return '—';
+    try {
+        const d = new Date(dateStr);
+        const today = new Date();
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (d.toDateString() === today.toDateString()) return "Aujourd'hui";
+        if (d.toDateString() === yesterday.toDateString()) return 'Hier';
+        return d.toLocaleDateString('fr', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    } catch { return dateStr; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════ */
 /*                       PRESCRIPTIONS PAGE                           */
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -103,6 +117,7 @@ export default function Prescriptions() {
 
     /* ── Patient's existing prescriptions ── */
     const [patientPrescriptions, setPatientPrescriptions] = useState<Prescription[]>([]);
+    const [patientDocuments, setPatientDocuments] = useState<PatientDocument[]>([]);
     const [prescriptionPage, setPrescriptionPage] = useState(0);
     const ROWS_PER_PAGE = 5;
 
@@ -186,9 +201,13 @@ export default function Prescriptions() {
                 setStep('generate-pdf');
                 setShowProfileModal(false);
                 showSuccess('Profil médecin créé avec succès !');
+            } else {
+                console.error('Create profile failed:', result.message);
+                showError(result.message || 'Erreur lors de la création du profil');
             }
         } catch (error) {
             console.error('Error creating profile:', error);
+            showError('Erreur lors de la création du profil');
         }
     };
 
@@ -213,11 +232,15 @@ export default function Prescriptions() {
     /* ── Patient selection ── */
     const loadPatientPrescriptions = async (patientId: number) => {
         try {
-            const result = await (window as any).ipcRenderer.getPatientPrescriptions(patientId);
-            if (result.status === 'success') {
-                setPatientPrescriptions(result.data || []);
+            const [prescResult, docsResult] = await Promise.all([
+                (window as any).ipcRenderer.getPatientPrescriptions(patientId),
+                (window as any).ipcRenderer.invoke('get-documents-by-patient-id', patientId),
+            ]);
+            if (prescResult.status === 'success') {
+                setPatientPrescriptions(prescResult.data || []);
                 setPrescriptionPage(0);
             }
+            setPatientDocuments(Array.isArray(docsResult) ? docsResult : []);
         } catch (e) {
             console.error('Error loading prescriptions:', e);
         }
@@ -240,6 +263,7 @@ export default function Prescriptions() {
         setShowPatientDropdown(false);
         setNewMedications([]);
         setPatientPrescriptions([]);
+        setPatientDocuments([]);
         setPrescriptionPage(0);
         setWeight('');
     };
@@ -260,41 +284,33 @@ export default function Prescriptions() {
         if (!selectedPatient || !currentUserId || newMedications.length === 0) return;
         setIsSaving(true);
         try {
-            const savedPrescriptions: Prescription[] = [];
-            for (const med of newMedications) {
-                const result = await (window as any).ipcRenderer.invoke(
-                    'add-prescription',
-                    currentUserId,
-                    selectedPatient.id,
-                    med.medicineName,
-                    med.dosage,
-                    med.frequency,
-                    med.quantity,
-                    med.duration
+            // Create a single prescription with all medicines
+            const result = await (window as any).ipcRenderer.invoke(
+                'add-prescription',
+                currentUserId,
+                selectedPatient.id,
+                newMedications,
+            );
+
+            if (result.status === 'success') {
+                // Load the full prescription (with medicines) for PDF generation
+                const prescriptionResult = await (window as any).ipcRenderer.invoke(
+                    'get-prescription-by-id',
+                    result.data.prescriptionId,
+                    selectedPatient.id
                 );
-                if (result.status === 'success') {
-                    savedPrescriptions.push({
-                        id: result.data.lastInsertRowid,
-                        userId: currentUserId,
-                        patientId: selectedPatient.id,
-                        medicineName: med.medicineName,
-                        dosage: med.dosage,
-                        frequency: med.frequency,
-                        quantity: med.quantity,
-                        duration: med.duration,
-                        createdAt: new Date().toISOString(),
-                    });
+
+                // Generate PDF automatically after saving
+                if (doctorProfile && prescriptionResult.status === 'success') {
+                    await handleGeneratePatientPdf([prescriptionResult.data.prescription]);
                 }
-            }
 
-            // Generate PDF automatically after saving
-            if (doctorProfile && savedPrescriptions.length > 0) {
-                await handleGeneratePatientPdf(savedPrescriptions);
+                setNewMedications([]);
+                showSuccess('Ordonnance enregistrée et PDF généré avec succès !');
+                await loadPatientPrescriptions(selectedPatient.id);
+            } else {
+                showError(result.message || 'Erreur lors de l\'enregistrement');
             }
-
-            setNewMedications([]);
-            showSuccess('Ordonnance enregistrée et PDF généré avec succès !');
-            await loadPatientPrescriptions(selectedPatient.id);
         } catch (e) {
             console.error('Error saving ordonnance:', e);
             showError('Erreur lors de l\'enregistrement de l\'ordonnance');
@@ -573,7 +589,7 @@ export default function Prescriptions() {
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-bold text-navy">{selectedPatient.fullName}</p>
                                     <p className="text-xs text-navy/40">
-                                        {[selectedPatient.phoneNumber, selectedPatient.email].filter(Boolean).join(' • ')}
+                                        {[selectedPatient.phoneNumber].filter(Boolean).join(' • ')}
                                     </p>
                                 </div>
                                 <button
@@ -748,7 +764,7 @@ export default function Prescriptions() {
                                                     <div className="w-5 h-5 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center">
                                                         <span className="text-[9px] font-bold text-white">{patientPrescriptions.length}</span>
                                                     </div>
-                                                    <span className="text-xs text-navy/35">{patientPrescriptions.length} médicament{patientPrescriptions.length > 1 ? 's' : ''}</span>
+                                                    <span className="text-xs text-navy/35">{patientPrescriptions.length} ordonnance{patientPrescriptions.length > 1 ? 's' : ''}</span>
                                                 </div>
                                             </>
                                         )}
@@ -761,55 +777,156 @@ export default function Prescriptions() {
                                         <p className="text-sm text-navy/35 font-medium mb-1">Aucune ordonnance précédente</p>
                                         <p className="text-xs text-navy/25">Les ordonnances enregistrées pour ce patient apparaîtront ici</p>
                                     </div>
-                                ) : (
-                                    <>
-                                        <div className="divide-y divide-navy/[0.04]">
-                                            {patientPrescriptions.slice(prescriptionPage * ROWS_PER_PAGE, (prescriptionPage + 1) * ROWS_PER_PAGE).map(presc => (
-                                                <div key={presc.id} className="flex items-center gap-3 px-5 py-3.5 group hover:bg-navy/[0.015] transition-colors">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-pink/60 flex-shrink-0" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-navy">{presc.medicineName}</p>
-                                                        <p className="text-[11px] text-navy/40">
-                                                            {[presc.dosage, presc.quantity, presc.frequency, presc.duration].filter(Boolean).join(' • ')}
-                                                        </p>
+                                ) : (() => {
+                                    const paginatedPrescs = patientPrescriptions.slice(prescriptionPage * ROWS_PER_PAGE, (prescriptionPage + 1) * ROWS_PER_PAGE);
+
+                                    // Group paginated prescriptions by date
+                                    const grouped: { dateLabel: string; items: Prescription[] }[] = [];
+                                    let lastDateKey = '';
+                                    for (const presc of paginatedPrescs) {
+                                        const dateKey = new Date(presc.createdAt).toDateString();
+                                        if (dateKey !== lastDateKey) {
+                                            grouped.push({ dateLabel: formatDateGroup(presc.createdAt), items: [presc] });
+                                            lastDateKey = dateKey;
+                                        } else {
+                                            grouped[grouped.length - 1].items.push(presc);
+                                        }
+                                    }
+
+                                    // Find linked PDF document for a prescription
+                                    const findPdfDoc = (presc: Prescription) => {
+                                        // 1. Try exact match by prescriptionId
+                                        const exact = patientDocuments.find(d => 
+                                            d.fileCategory === 'prescription' && 
+                                            d.prescriptionId != null && 
+                                            String(d.prescriptionId) === String(presc.id)
+                                        );
+                                        if (exact) return exact;
+
+                                        // 2. Try fallback match by timestamp proximity (within 60 seconds)
+                                        return patientDocuments.find(d => {
+                                            if (d.fileCategory !== 'prescription') return false;
+                                            if (d.prescriptionId !== null && d.prescriptionId !== undefined) return false;
+                                            try {
+                                                const pTime = new Date(presc.createdAt.replace(' ', 'T')).getTime();
+                                                const dTime = new Date(d.uploadDate.replace(' ', 'T')).getTime();
+                                                return Math.abs(pTime - dTime) < 60000;
+                                            } catch {
+                                                return false;
+                                            }
+                                        });
+                                    };
+
+                                    const handleViewPdf = async (localPath: string) => {
+                                        try {
+                                            await (window as any).ipcRenderer.invoke('open-document', localPath);
+                                        } catch (e) {
+                                            console.error('Error opening PDF:', e);
+                                        }
+                                    };
+
+                                    return (
+                                        <>
+                                            <div>
+                                                {grouped.map((group, gi) => (
+                                                    <div key={gi}>
+                                                        {/* Date header */}
+                                                        <div className="px-5 py-2 bg-navy/[0.02] border-b border-navy/[0.04] sticky top-0">
+                                                            <span className="text-[11px] font-semibold uppercase tracking-wider text-navy/35">
+                                                                📅 {group.dateLabel}
+                                                            </span>
+                                                        </div>
+                                                        {/* Prescriptions in this date group */}
+                                                        <div className="divide-y divide-navy/[0.04]">
+                                                            {group.items.map(presc => {
+                                                                const pdfDoc = findPdfDoc(presc);
+                                                                return (
+                                                                    <div key={presc.id} className="px-5 py-3.5 group hover:bg-navy/[0.015] transition-colors">
+                                                                        <div className="flex items-start gap-3">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <div className="flex items-center gap-2 mb-1">
+                                                                                    <p className="text-xs font-semibold text-navy/40">
+                                                                                        Ordonnance #{presc.id} — {presc.medicines.length} médicament{presc.medicines.length > 1 ? 's' : ''}
+                                                                                    </p>
+                                                                                    <span className="text-[10px] text-navy/20">
+                                                                                        {new Date(presc.createdAt).toLocaleTimeString('fr', { hour: '2-digit', minute: '2-digit' })}
+                                                                                    </span>
+                                                                                </div>
+                                                                                {presc.medicines.map((med) => (
+                                                                                    <div key={med.id} className="flex items-center gap-2 ml-2 mb-0.5">
+                                                                                        <span className="w-1.5 h-1.5 rounded-full bg-pink/60 flex-shrink-0" />
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <span className="text-sm font-medium text-navy">{med.medicineName}</span>
+                                                                                            <span className="text-[11px] text-navy/40 ml-2">
+                                                                                                {[med.dosage, med.quantity, med.frequency, med.duration].filter(Boolean).join(' • ')}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                                {presc.notes && (
+                                                                                    <p className="text-[11px] text-navy/35 italic mt-1 ml-2">📝 {presc.notes}</p>
+                                                                                )}
+                                                                            </div>
+                                                                            {/* Actions */}
+                                                                            <div className="flex items-center gap-1.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                {pdfDoc ? (
+                                                                                    <button
+                                                                                        onClick={() => handleViewPdf(pdfDoc.localPath)}
+                                                                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer"
+                                                                                        title="Voir le PDF"
+                                                                                    >
+                                                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                                                            <polyline points="14 2 14 8 20 8" />
+                                                                                        </svg>
+                                                                                        PDF
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-navy/20 italic">Aucun PDF</span>
+                                                                                )}
+                                                                                <button
+                                                                                    onClick={() => handleDeletePrescription(presc.id)}
+                                                                                    className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                                                                                    title="Supprimer"
+                                                                                >
+                                                                                    {icons.trash}
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
-                                                    <span className="text-[10px] text-navy/25 flex-shrink-0">{formatDate(presc.createdAt)}</span>
-                                                    <button
-                                                        onClick={() => handleDeletePrescription(presc.id)}
-                                                        className="p-1.5 rounded-lg text-navy/20 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-                                                        title="Supprimer"
-                                                    >
-                                                        {icons.trash}
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        {/* Pagination */}
-                                        {patientPrescriptions.length > ROWS_PER_PAGE && (
-                                            <div className="px-5 py-3 border-t border-navy/[0.06] flex items-center justify-between">
-                                                <span className="text-xs text-navy/35">
-                                                    {prescriptionPage * ROWS_PER_PAGE + 1}–{Math.min((prescriptionPage + 1) * ROWS_PER_PAGE, patientPrescriptions.length)} sur {patientPrescriptions.length}
-                                                </span>
-                                                <div className="flex items-center gap-1.5">
-                                                    <button
-                                                        onClick={() => setPrescriptionPage(p => p - 1)}
-                                                        disabled={prescriptionPage === 0}
-                                                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    >
-                                                        ← Précédent
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setPrescriptionPage(p => p + 1)}
-                                                        disabled={(prescriptionPage + 1) * ROWS_PER_PAGE >= patientPrescriptions.length}
-                                                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    >
-                                                        Suivant →
-                                                    </button>
-                                                </div>
+                                                ))}
                                             </div>
-                                        )}
-                                    </>
-                                )}
+                                            {/* Pagination */}
+                                            {patientPrescriptions.length > ROWS_PER_PAGE && (
+                                                <div className="px-5 py-3 border-t border-navy/[0.06] flex items-center justify-between">
+                                                    <span className="text-xs text-navy/35">
+                                                        {prescriptionPage * ROWS_PER_PAGE + 1}–{Math.min((prescriptionPage + 1) * ROWS_PER_PAGE, patientPrescriptions.length)} sur {patientPrescriptions.length}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button
+                                                            onClick={() => setPrescriptionPage(p => p - 1)}
+                                                            disabled={prescriptionPage === 0}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            ← Précédent
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setPrescriptionPage(p => p + 1)}
+                                                            disabled={(prescriptionPage + 1) * ROWS_PER_PAGE >= patientPrescriptions.length}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-navy/50 hover:bg-navy/[0.04] hover:text-navy transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                                        >
+                                                            Suivant →
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </>
                     )}

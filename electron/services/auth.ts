@@ -87,7 +87,16 @@ export function checkAuth() {
             return { status: "fail", message: "No saved session" };
         }
 
-        const decoded = jwt.verify(stored.token, JWT_SECRET);
+        const decoded = jwt.verify(stored.token, JWT_SECRET) as { id: number; fullName: string; role: string };
+
+        // Verify the user still exists in the database (handles DB reset scenarios)
+        const db = getDatabase();
+        const user = db.prepare(`SELECT id FROM users WHERE id = ?`).get(decoded.id);
+        if (!user) {
+            deleteJWT();
+            return { status: "fail", message: "User no longer exists" };
+        }
+
         return { status: "success", token: stored.token, user: decoded };
     } catch (error) {
         // Token expired or invalid — clean up

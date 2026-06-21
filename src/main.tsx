@@ -7,7 +7,9 @@ import Dashboard from './pages/Dashboard/Dashboard'
 import Patients from './pages/Patients/Patients'
 import PatientDetails from './pages/PatientDetails/PatientDetails'
 import Prescriptions from './pages/Prescriptions/Prescriptions'
+import Appointments from './pages/Appointments/Appointments'
 import Authentification from './pages/Authentification/Authentification'
+import Documents from './pages/Documents/Documents'
 import './services/i18n';
 import './index.css'
 
@@ -21,6 +23,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/patients" element={<Layout><Patients /></Layout>} />
         <Route path="/patients/:id" element={<Layout><PatientDetails /></Layout>} />
         <Route path="/prescriptions" element={<Layout><Prescriptions /></Layout>} />
+        <Route path="/documents" element={<Layout><Documents /></Layout>} />
+        <Route path="/appointments" element={<Layout><Appointments /></Layout>} />
       </Routes>
     </HashRouter>
   </React.StrictMode>,
