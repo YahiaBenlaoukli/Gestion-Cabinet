@@ -1,23 +1,16 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-
-interface DoctorProfile {
-  id: number;
-  userId: number;
-  fullName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  speciality: string;
-  hasCompletedProfile: boolean;
-  pdfPath?: string;
-}
+import type { TrialStatus } from "../../../types/trial";
+import type { DoctorProfile } from "../../../types/doctor";
+import type { Patient } from "../../../types/patient";
 
 export default function Parameters() {
   const { t } = useTranslation();
+  const location = useLocation();
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<"profile" | "consultation" | "security" | "data">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "consultation" | "security" | "data" | "license">("profile");
 
   // User Session & Doctor Profile States
   const [currentUser, setCurrentUser] = useState<{ id: number; fullName: string; role: string } | null>(null);
@@ -45,15 +38,28 @@ export default function Parameters() {
   const [confirmResetText, setConfirmResetText] = useState("");
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
+  // License / trial
+  const [trialStatus, setTrialStatus] = useState<TrialStatus | null>(null);
+  const [licenseKey, setLicenseKey] = useState("");
+  const [activatingLicense, setActivatingLicense] = useState(false);
+
+  // Deep-link support: the trial pill navigates to /settings?tab=license
+  useEffect(() => {
+    const tab = new URLSearchParams(location.search).get("tab");
+    if (tab === "profile" || tab === "consultation" || tab === "security" || tab === "data" || tab === "license") {
+      setActiveTab(tab);
+    }
+  }, [location.search]);
+
   // Fetch initial authentication and doctor profile
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const auth = await (window as any).ipcRenderer.checkAuth();
+        const auth = await window.ipcRenderer.checkAuth();
         if (auth?.status === "success" && auth.user?.id) {
           setCurrentUser(auth.user);
-          const profileResult = await (window as any).ipcRenderer.getDoctorProfile(auth.user.id);
+          const profileResult = await window.ipcRenderer.getDoctorProfile(auth.user.id);
           if (profileResult.status === "success" && profileResult.data) {
             const p = profileResult.data;
             setProfile(p);
@@ -76,7 +82,36 @@ export default function Parameters() {
     // Load LocalStorage Consultation Settings
     setDefaultPrice(localStorage.getItem("default_consultation_price") || "2000");
     setDefaultDuration(localStorage.getItem("default_consultation_duration") || "30");
+
+    // Load trial / license status
+    window.ipcRenderer.getTrialStatus()
+      .then((status: TrialStatus) => setTrialStatus(status))
+      .catch(() => setTrialStatus(null));
   }, []);
+
+  // License Activation
+  const handleActivateLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActivatingLicense(true);
+    try {
+      const result = await window.ipcRenderer.activateLicense(licenseKey);
+      if (result?.status === "success") {
+        setLicenseKey("");
+        const status = await window.ipcRenderer.getTrialStatus();
+        setTrialStatus(status);
+        // Tell TrialGate to re-check so the trial pill disappears immediately
+        window.dispatchEvent(new Event("license-activated"));
+        triggerToast("success", t("trial.success"));
+      } else {
+        triggerToast("error", result?.message || t("trial.error_invalid"));
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast("error", t("trial.error_connection"));
+    } finally {
+      setActivatingLicense(false);
+    }
+  };
 
   const triggerToast = (type: "success" | "error", msg: string) => {
     if (type === "success") {
@@ -101,7 +136,7 @@ export default function Parameters() {
     setSuccessMsg("");
 
     try {
-      const result = await (window as any).ipcRenderer.updateDoctorProfile(
+      const result = await window.ipcRenderer.updateDoctorProfile(
         currentUser.id,
         fullName,
         speciality,
@@ -136,7 +171,7 @@ export default function Parameters() {
   const handleLogout = async () => {
     if (window.confirm(t("settings.security.logout_confirm"))) {
       try {
-        await (window as any).ipcRenderer.logout();
+        await window.ipcRenderer.logout();
         window.location.hash = "/";
       } catch (err) {
         console.error("Logout failed:", err);
@@ -147,7 +182,7 @@ export default function Parameters() {
   // Export Patients as JSON
   const handleExportJSON = async () => {
     try {
-      const patients = await (window as any).ipcRenderer.getAllPatients();
+      const patients = await window.ipcRenderer.getAllPatients();
       const blob = new Blob([JSON.stringify(patients, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -165,11 +200,11 @@ export default function Parameters() {
   // Export Patients as CSV
   const handleExportCSV = async () => {
     try {
-      const patients = await (window as any).ipcRenderer.getAllPatients();
+      const patients = await window.ipcRenderer.getAllPatients();
       const headers = ["ID", "Nom Complet", "Date de Naissance", "Adresse", "Téléphone", "N Secu", "Gr Sanguin", "Date Creation"];
       const csvRows = [headers.join(",")];
 
-      patients.forEach((p: any) => {
+      patients.forEach((p: Patient) => {
         csvRows.push([
           p.id,
           `"${(p.fullName || "").replace(/"/g, '""')}"`,
@@ -205,7 +240,7 @@ export default function Parameters() {
     }
 
     try {
-      const result = await (window as any).ipcRenderer.resetDatabase();
+      const result = await window.ipcRenderer.resetDatabase();
       if (result.status === "success") {
         triggerToast("success", t("settings.data.reset_success"));
         setShowResetConfirmModal(false);
@@ -259,7 +294,7 @@ export default function Parameters() {
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Navigation Sidebar Cards */}
         <div className="w-full lg:w-64 bg-white rounded-3xl p-4 border border-white/40 shadow-[0_4px_20px_rgba(30,42,86,0.03)] flex flex-row lg:flex-col gap-1.5 overflow-x-auto lg:overflow-x-visible">
-          {[
+          {([
             { id: "profile", label: t("settings.tabs.profile"), icon: (
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -279,11 +314,16 @@ export default function Parameters() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0v3.75" />
               </svg>
+            ) },
+            { id: "license", label: t("settings.tabs.license"), icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+              </svg>
             ) }
-          ].map((tab) => (
+          ] as { id: typeof activeTab; label: string; icon: React.ReactNode }[]).map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap lg:whitespace-normal w-full select-none ${
                 activeTab === tab.id
                   ? "bg-[#e91e8c]/10 text-[#e91e8c]"
@@ -397,7 +437,7 @@ export default function Parameters() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => (window as any).ipcRenderer.openDocument(profile.pdfPath!)}
+                    onClick={() => window.ipcRenderer.openDocument(profile.pdfPath!)}
                     className="flex-shrink-0 bg-navy/5 hover:bg-navy/10 text-navy text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer select-none"
                   >
                     Ouvrir
@@ -597,6 +637,107 @@ export default function Parameters() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Tab 5: License Activation */}
+          {activeTab === "license" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-[#1E2A56]">{t("settings.license.title")}</h2>
+                <p className="text-xs text-[#1E2A56]/50 mt-1">{t("settings.license.subtitle")}</p>
+              </div>
+
+              {/* Current status card */}
+              {trialStatus?.licensed ? (
+                <div className="p-5 bg-emerald-50/60 border border-emerald-200 rounded-3xl flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-emerald-800">{t("settings.license.status_licensed")}</h3>
+                    <p className="text-xs text-emerald-700/80 mt-0.5">{t("settings.license.status_licensed_hint")}</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Urgency warning: the app hard-locks when the trial runs out */}
+                  <div className="p-5 bg-rose-50/50 border border-rose-100 rounded-3xl">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-rose-600/20">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold text-rose-800 leading-tight">
+                          {t("settings.license.warning_title", { days: trialStatus?.daysRemaining ?? 0 })}
+                        </h3>
+                        <p className="text-xs text-rose-700/80 leading-relaxed mt-2 font-medium">
+                          {t("settings.license.warning_text")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Days-left countdown bar */}
+                    {trialStatus && trialStatus.totalDays > 0 && (
+                      <div className="mt-5">
+                        <div className="h-2 w-full rounded-full bg-rose-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-rose-600 transition-all"
+                            style={{ width: `${Math.max(4, Math.round((trialStatus.daysRemaining / trialStatus.totalDays) * 100))}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] font-bold text-rose-700/80 mt-1.5">
+                          {t("settings.license.warning_countdown", { days: trialStatus.daysRemaining, total: trialStatus.totalDays })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Activation form */}
+                  <form onSubmit={handleActivateLicense} className="space-y-5">
+                    <div>
+                      <label htmlFor="settings-license-key" className="block text-xs font-bold text-navy/55 uppercase tracking-wider mb-2">
+                        {t("trial.license_label")}
+                      </label>
+                      <input
+                        type="text"
+                        id="settings-license-key"
+                        value={licenseKey}
+                        onChange={(e) => setLicenseKey(e.target.value)}
+                        placeholder={t("trial.license_placeholder")}
+                        autoComplete="off"
+                        spellCheck={false}
+                        required
+                        className="w-full max-w-xl px-4 py-3 text-sm bg-bg/50 border border-navy/[0.08] rounded-2xl text-navy placeholder:text-navy/20 focus:outline-none focus:border-[#e91e8c]/40 focus:bg-white transition-all font-mono"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={activatingLicense || !licenseKey.trim()}
+                      className="w-full md:w-auto px-10 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-extrabold uppercase tracking-wide shadow-md shadow-rose-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {activatingLicense ? t("trial.activating") : t("trial.activate_now")}
+                    </button>
+                  </form>
+
+                  <p className="text-xs text-navy/40">
+                    {t("trial.contact")}{" "}
+                    <a
+                      href="https://www.ausculta.site/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#e91e8c] font-semibold underline underline-offset-2 hover:text-navy transition-colors"
+                    >
+                      www.ausculta.site
+                    </a>
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>

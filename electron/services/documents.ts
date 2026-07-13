@@ -12,7 +12,7 @@ if (!fs.existsSync(recordsFolder)) {
 
 
 
-export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'uploadDate'>): Promise<PatientDocument | undefined> {
+export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'uploadDate'>): Promise<PatientDocument> {
     try {
         const patientFolder = path.join(recordsFolder, document.patientId.toString());
 
@@ -40,7 +40,10 @@ export async function uploadDocument(document: Omit<PatientDocument, 'id' | 'upl
             fileName: uniqueFilename
         };
     } catch (error) {
-        console.log(error);
+        // Rethrow so callers (the upload UI, prescription PDF generation) see
+        // the failure instead of a silent undefined.
+        console.error("uploadDocument error:", error);
+        throw error;
     }
 }
 
@@ -116,24 +119,34 @@ export function getAllDocuments() {
 }
 
 
-export function deleteDocument(id: number): void {
+export function deleteDocument(id: number): { status: "success" | "fail"; message?: string } {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
         SELECT local_path FROM patient_documents WHERE id = ?
     `);
-        const result = stmt.get(id) as { local_path: string, patient_id: number };
+        const result = stmt.get(id) as { local_path: string } | undefined;
 
-        if (result) {
-            fs.unlinkSync(result.local_path);
-        }
-
+        // Delete the DB row FIRST: if the file is already gone from disk the
+        // document must still be removable, so the unlink is best-effort.
         const stmt2 = db.prepare(`
         DELETE FROM patient_documents WHERE id = ?
     `);
         stmt2.run(id);
+
+        if (result) {
+            try {
+                fs.unlinkSync(result.local_path);
+            } catch (err) {
+                if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+                    console.error("deleteDocument: file removal failed:", err);
+                }
+            }
+        }
+        return { status: "success" };
     } catch (error) {
-        console.log(error);
+        console.error("deleteDocument error:", error);
+        return { status: "fail", message: (error as Error).message };
     }
 }
 

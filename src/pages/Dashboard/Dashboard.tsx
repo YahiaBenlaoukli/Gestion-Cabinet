@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import type { DoctorProfile } from "../../../types/doctor";
 import {
   ResponsiveContainer,
   PieChart,
@@ -27,7 +28,7 @@ export default function Dashboard() {
 
   // Auth and profile states
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [doctorProfile, setDoctorProfile] = useState<any>(null);
+  const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Stats numbers
@@ -54,7 +55,7 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const auth = await (window as any).ipcRenderer.checkAuth();
+        const auth = await window.ipcRenderer.checkAuth();
         if (auth?.status === 'success' && auth.user?.id) {
           setCurrentUserId(auth.user.id);
         } else {
@@ -72,7 +73,7 @@ export default function Dashboard() {
     if (currentUserId !== null) {
       (async () => {
         try {
-          const profileResult = await window.ipcRenderer.invoke('get-doctor-profile', currentUserId);
+          const profileResult = await window.ipcRenderer.getDoctorProfile(currentUserId);
           if (profileResult.status === 'success' && profileResult.data) {
             setDoctorProfile(profileResult.data);
           }
@@ -84,22 +85,21 @@ export default function Dashboard() {
   }, [currentUserId]);
 
   // Load appointments and counts
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!doctorProfile) return;
     setLoading(true);
     try {
       // 1. Fetch today's appointments
-      const appts = await (window as any).ipcRenderer.getAppointmentsByDay(doctorProfile.id, todayDateStr);
-      const apptsList = Array.isArray(appts) ? appts : [];
+      const appts = await window.ipcRenderer.getAppointmentsByDay(doctorProfile.id, todayDateStr);
+      const apptsList = Array.isArray(appts) ? (appts as Appointment[]) : [];
       setTodayAppointments(apptsList);
 
       // 2. Fetch count metrics
-      const patientsCountResult = await window.ipcRenderer.invoke('count-patients');
-      const prescriptionsCountResult = await window.ipcRenderer.invoke('count-prescriptions');
-      const documentsResult = await window.ipcRenderer.invoke('get-all-documents');
-
-      const totalPatients = typeof patientsCountResult === 'number' ? patientsCountResult : 0;
-      const totalPrescriptions = typeof prescriptionsCountResult === 'number' ? prescriptionsCountResult : 0;
+      const totalPatients = await window.ipcRenderer.countPatients();
+      // countPrescriptions returns { status, data } — unwrap the count
+      const prescriptionsCountResult = await window.ipcRenderer.countPrescriptions();
+      const totalPrescriptions = typeof prescriptionsCountResult?.data === 'number' ? prescriptionsCountResult.data : 0;
+      const documentsResult = await window.ipcRenderer.getAllDocuments();
       const totalDocuments = Array.isArray(documentsResult) ? documentsResult.length : 0;
 
       setStats({
@@ -113,13 +113,13 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [doctorProfile, todayDateStr]);
 
   useEffect(() => {
     if (doctorProfile) {
       loadDashboardData();
     }
-  }, [doctorProfile, todayDateStr]);
+  }, [doctorProfile, loadDashboardData]);
 
   // Calculate status breakdown for the chart
   const distributionData = useMemo(() => {

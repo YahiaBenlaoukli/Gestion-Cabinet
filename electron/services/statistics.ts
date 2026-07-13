@@ -1,6 +1,13 @@
 import { getDatabase } from '../db/db';
 
-export function getFinancalStatistics(startDate: string, endDate: string, appointmentPrice: number = 2000) {
+// Appointment datetimes are stored as 'YYYY-MM-DDTHH:MM:SS' strings, so a bare
+// 'YYYY-MM-DD' end date would exclude every appointment on that day in a
+// string BETWEEN comparison. Extend it to the end of the day.
+function endOfDay(date: string): string {
+    return date.length === 10 ? `${date}T23:59:59.999` : date;
+}
+
+export function getFinancialStatistics(startDate: string, endDate: string, appointmentPrice: number = 2000) {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
@@ -8,20 +15,29 @@ export function getFinancalStatistics(startDate: string, endDate: string, appoin
             FROM appointments
             WHERE status = 'Completed' AND appointment_datetime BETWEEN ? AND ?
         `);
-        const result = stmt.get(startDate, endDate) as { total_completed: number } | undefined;
+        const result = stmt.get(startDate, endOfDay(endDate)) as { total_completed: number } | undefined;
         const total_completed = result ? result.total_completed : 0;
         const total_revenue = total_completed * appointmentPrice;
         return { total_completed, total_revenue };
     } catch (error) {
-        console.error("getFinancalStatistics error:", error);
-        return { status: "fail", message: (error as Error).message };
+        console.error("getFinancialStatistics error:", error);
+        return { total_completed: 0, total_revenue: 0 };
     }
 }
 
 export function getAppointmentStatistics(startDate: string, endDate: string, appointmentPrice: number = 2000) {
+    const empty = {
+        total_completed: 0,
+        total_no_show: 0,
+        total_cancelled: 0,
+        total_scheduled: 0,
+        total_appointments: 0,
+        total_revenue: 0
+    };
     try {
         const db = getDatabase();
-        const stmt = db.prepare(`SELECT 
+        const end = endOfDay(endDate);
+        const stmt = db.prepare(`SELECT
             (SELECT COUNT(*) FROM appointments WHERE status = 'Completed' AND appointment_datetime BETWEEN ? AND ?) AS total_completed,
             (SELECT COUNT(*) FROM appointments WHERE status = 'No-Show' AND appointment_datetime BETWEEN ? AND ?) AS total_no_show,
             (SELECT COUNT(*) FROM appointments WHERE status = 'Cancelled' AND appointment_datetime BETWEEN ? AND ?) AS total_cancelled,
@@ -29,11 +45,11 @@ export function getAppointmentStatistics(startDate: string, endDate: string, app
             (SELECT COUNT(*) FROM appointments WHERE appointment_datetime BETWEEN ? AND ?) AS total_appointments
         `);
         const result = stmt.get(
-            startDate, endDate,
-            startDate, endDate,
-            startDate, endDate,
-            startDate, endDate,
-            startDate, endDate
+            startDate, end,
+            startDate, end,
+            startDate, end,
+            startDate, end,
+            startDate, end
         ) as {
             total_completed: number;
             total_no_show: number;
@@ -43,14 +59,7 @@ export function getAppointmentStatistics(startDate: string, endDate: string, app
         } | undefined;
 
         if (!result) {
-            return {
-                total_completed: 0,
-                total_no_show: 0,
-                total_cancelled: 0,
-                total_scheduled: 0,
-                total_appointments: 0,
-                total_revenue: 0
-            };
+            return empty;
         }
 
         return {
@@ -59,24 +68,25 @@ export function getAppointmentStatistics(startDate: string, endDate: string, app
         };
     } catch (error) {
         console.error("getAppointmentStatistics error:", error);
-        return { status: "fail", message: (error as Error).message };
+        return empty;
     }
 }
 
 export function getNoShowRate(startDate: string, endDate: string) {
     try {
         const db = getDatabase();
-        
+        const end = endOfDay(endDate);
+
         // Get counts for rate calculation
-        const countsStmt = db.prepare(`SELECT 
+        const countsStmt = db.prepare(`SELECT
             (SELECT COUNT(*) FROM appointments WHERE status = 'No-Show' AND appointment_datetime BETWEEN ? AND ?) AS total_no_show,
             (SELECT COUNT(*) FROM appointments WHERE appointment_datetime BETWEEN ? AND ?) AS total_appointments
         `);
-        const counts = countsStmt.get(startDate, endDate, startDate, endDate) as {
+        const counts = countsStmt.get(startDate, end, startDate, end) as {
             total_no_show: number;
             total_appointments: number;
         } | undefined;
-        
+
         const total_no_show = counts ? counts.total_no_show : 0;
         const total_appointments = counts ? counts.total_appointments : 0;
         const no_show_rate = total_appointments > 0 ? (total_no_show / total_appointments) * 100 : 0;
@@ -91,7 +101,7 @@ export function getNoShowRate(startDate: string, endDate: string) {
             ORDER BY no_show_count DESC
             LIMIT 5
         `);
-        const top_no_show_patients = topPatientsStmt.all(startDate, endDate);
+        const top_no_show_patients = topPatientsStmt.all(startDate, end);
 
         return {
             total_no_show,
@@ -101,7 +111,7 @@ export function getNoShowRate(startDate: string, endDate: string) {
         };
     } catch (error) {
         console.error("getNoShowRate error:", error);
-        return { status: "fail", message: (error as Error).message };
+        return { total_no_show: 0, total_appointments: 0, no_show_rate: 0, top_no_show_patients: [] };
     }
 }
 
@@ -109,7 +119,7 @@ export function getConsultationVolume(startDate: string, endDate: string) {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
-            SELECT 
+            SELECT
                 strftime('%Y-%m', appointment_datetime) AS month,
                 COUNT(*) AS total_appointments,
                 SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_appointments
@@ -118,10 +128,10 @@ export function getConsultationVolume(startDate: string, endDate: string) {
             GROUP BY month
             ORDER BY month ASC
         `);
-        const monthlyVolume = stmt.all(startDate, endDate);
+        const monthlyVolume = stmt.all(startDate, endOfDay(endDate));
         return monthlyVolume;
     } catch (error) {
         console.error("getConsultationVolume error:", error);
-        return { status: "fail", message: (error as Error).message };
+        return [];
     }
-}
+}

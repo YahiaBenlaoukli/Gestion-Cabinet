@@ -17,5 +17,6 @@ export type Patient = {
     phoneNumber: string;
     ssn: string;
     bloodType: BloodType | null;
+    notes?: string | null;
     createdAt: string;
 };

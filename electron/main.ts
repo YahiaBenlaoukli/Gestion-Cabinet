@@ -1,5 +1,5 @@
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { initializeDatabase } from './db/db'
@@ -7,8 +7,9 @@ import { addPatient, getPatient, getAllPatients, updatePatient, deletePatient, s
 import { uploadDocument, getDocumentsByPatientId, getAllDocuments, deleteDocument, openDocument } from './services/documents'
 import { addPrescription, getPrescriptionById, getPatientPrescriptions, getAllPrescriptions, updatePrescription, deletePrescription, searchPrescription, countPrescriptions, createDoctorProfile, getDoctorProfileByUserId, updateDoctorProfile, setPrescriptionPdf, generatePatientPrescriptionPDF } from './services/prescription'
 import { createUser, login, checkAuth, logout } from './services/auth'
-import { getAllAppointments, bookAppoitment, cancelAppointment, deleteAppointment, updateAppointment, getAppointmentsByDay, getAppointmentsByPatientId, getAppointmentsByDateRange } from './services/appointments'
-import { getFinancalStatistics, getAppointmentStatistics, getNoShowRate, getConsultationVolume } from './services/statistics'
+import { bookAppointment, cancelAppointment, deleteAppointment, updateAppointment, getAppointmentsByDay, getAppointmentsByPatientId, getAppointmentsByDateRange } from './services/appointments'
+import { getFinancialStatistics, getAppointmentStatistics, getNoShowRate, getConsultationVolume } from './services/statistics'
+import { getTrialStatus, activateLicense } from './services/trial'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -38,6 +39,15 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
+  })
+
+  // External links (target="_blank" / window.open) go to the default browser,
+  // never a new Electron window.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' }
   })
 
   // Test active push message to Renderer-process.
@@ -108,13 +118,12 @@ app.whenReady().then(() => {
 
   //gestion authentification
   ipcMain.handle('create-user', async (_event, user) => await createUser(user));
-  ipcMain.handle('login', async (_event, phoneNumber, password, stayLogged) => login(phoneNumber, password, stayLogged));
+  ipcMain.handle('login', async (_event, fullName, password, stayLogged) => login(fullName, password, stayLogged));
   ipcMain.handle('check-auth', async () => checkAuth());
   ipcMain.handle('logout', async () => logout());
 
   //gestion des rendez-vous
-  ipcMain.handle('get-all-appointments', async (_event, doctorId, date) => getAllAppointments(doctorId, date));
-  ipcMain.handle('book-appointment', async (_event, patientId, doctorId, datetime, duration, reason) => bookAppoitment(patientId, doctorId, datetime, duration, reason));
+  ipcMain.handle('book-appointment', async (_event, patientId, doctorId, datetime, duration, reason) => bookAppointment(patientId, doctorId, datetime, duration, reason));
   ipcMain.handle('cancel-appointment', async (_event, id) => cancelAppointment(id));
   ipcMain.handle('delete-appointment', async (_event, id) => deleteAppointment(id));
   ipcMain.handle('update-appointment', async (_event, id, status) => updateAppointment(id, status));
@@ -123,10 +132,14 @@ app.whenReady().then(() => {
   ipcMain.handle('get-appointments-by-date-range', async (_event, doctorId, startDate, endDate) => getAppointmentsByDateRange(doctorId, startDate, endDate));
 
   //gestion des statistiques
-  ipcMain.handle('get-financial-statistics', async (_event, startDate, endDate, appointmentPrice) => getFinancalStatistics(startDate, endDate, appointmentPrice));
+  ipcMain.handle('get-financial-statistics', async (_event, startDate, endDate, appointmentPrice) => getFinancialStatistics(startDate, endDate, appointmentPrice));
   ipcMain.handle('get-appointment-statistics', async (_event, startDate, endDate, appointmentPrice) => getAppointmentStatistics(startDate, endDate, appointmentPrice));
   ipcMain.handle('get-noshow-rate', async (_event, startDate, endDate) => getNoShowRate(startDate, endDate));
   ipcMain.handle('get-consultation-volume', async (_event, startDate, endDate) => getConsultationVolume(startDate, endDate));
+
+  //gestion de la licence / période d'essai
+  ipcMain.handle('get-trial-status', async () => getTrialStatus());
+  ipcMain.handle('activate-license', async (_event, key) => activateLicense(key));
 
   createWindow();
 })

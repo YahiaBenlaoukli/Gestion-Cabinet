@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useLayout } from '../Layout/Layout'
+import { useLayout } from '../Layout/LayoutContext'
 import { useTranslation } from 'react-i18next'
 
 /* ─── Inline SVG Icons ─── */
@@ -300,5 +300,3 @@ export default function Sidebar() {
     </nav>
   )
 }
-
-export { type NavItem, navItems }

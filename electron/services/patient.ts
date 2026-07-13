@@ -1,8 +1,20 @@
 import { getDatabase } from "../db/db";
 import type { Patient } from "../../types/patient";
 
+type PatientRow = {
+    id: number;
+    full_name: string;
+    date_of_birth: string;
+    address: string;
+    phone_number: string;
+    ssn: string;
+    blood_type: Patient["bloodType"];
+    notes: string | null;
+    created_at: string;
+};
+
 /* Maps a snake_case DB row to the camelCase Patient type */
-function mapRow(row: any): Patient {
+function mapRow(row: PatientRow): Patient {
     return {
         id: row.id,
         fullName: row.full_name,
@@ -11,8 +23,14 @@ function mapRow(row: any): Patient {
         phoneNumber: row.phone_number,
         ssn: row.ssn,
         bloodType: row.blood_type,
+        notes: row.notes,
         createdAt: row.created_at,
     };
+}
+
+/* Escapes LIKE wildcards in user-supplied search text (used with ESCAPE '\') */
+function escapeLike(query: string): string {
+    return query.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 export async function addPatient(patient: Omit<Patient, 'id' | 'createdAt'>): Promise<Patient> {
@@ -29,24 +47,23 @@ export async function addPatient(patient: Omit<Patient, 'id' | 'createdAt'>): Pr
             createdAt: new Date().toISOString()
         };
     } catch (error) {
-        console.log(error);
+        console.error("addPatient error:", error);
         throw error as Error;
     }
 }
 
-export async function getPatient(id: number): Promise<Patient> {
+export async function getPatient(id: number): Promise<Patient | null> {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
         SELECT * FROM patients WHERE id = ?
     `);
-        const result = stmt.get(id);
-        return mapRow(result);
+        const result = stmt.get(id) as PatientRow | undefined;
+        return result ? mapRow(result) : null;
     } catch (error) {
-        console.log(error);
+        console.error("getPatient error:", error);
         throw error as Error;
     }
-
 }
 
 export async function getAllPatients(): Promise<Patient[]> {
@@ -55,11 +72,11 @@ export async function getAllPatients(): Promise<Patient[]> {
         const stmt = db.prepare(`
         SELECT * FROM patients
     `);
-        const result = stmt.all();
+        const result = stmt.all() as PatientRow[];
         return result.map(mapRow);
     } catch (error) {
-        console.log(error);
-        throw error as Error;
+        console.error("getAllPatients error:", error);
+        return [];
     }
 }
 
@@ -67,12 +84,12 @@ export async function updatePatient(patient: Patient): Promise<Patient> {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
-        UPDATE patients SET full_name = ?, date_of_birth = ?, address = ?, phone_number = ?, ssn = ?, blood_type = ? WHERE id = ?
+        UPDATE patients SET full_name = ?, date_of_birth = ?, address = ?, phone_number = ?, ssn = ?, blood_type = ?, notes = ? WHERE id = ?
     `);
-        stmt.run(patient.fullName, patient.dateOfBirth, patient.address, patient.phoneNumber, patient.ssn, patient.bloodType, patient.id);
+        stmt.run(patient.fullName, patient.dateOfBirth, patient.address, patient.phoneNumber, patient.ssn, patient.bloodType, patient.notes ?? null, patient.id);
         return patient;
     } catch (error) {
-        console.log(error);
+        console.error("updatePatient error:", error);
         throw error as Error;
     }
 }
@@ -85,7 +102,7 @@ export async function deletePatient(id: number): Promise<void> {
     `);
         stmt.run(id);
     } catch (error) {
-        console.log(error);
+        console.error("deletePatient error:", error);
         throw error as Error;
     }
 }
@@ -94,13 +111,14 @@ export async function searchPatients(query: string): Promise<Patient[]> {
     try {
         const db = getDatabase();
         const stmt = db.prepare(`
-        SELECT * FROM patients WHERE full_name LIKE ? OR ssn LIKE ?
+        SELECT * FROM patients WHERE full_name LIKE ? ESCAPE '\\' OR ssn LIKE ? ESCAPE '\\'
     `);
-        const result = stmt.all(`%${query}%`, `%${query}%`);
+        const pattern = `%${escapeLike(query)}%`;
+        const result = stmt.all(pattern, pattern) as PatientRow[];
         return result.map(mapRow);
     } catch (error) {
-        console.log(error);
-        throw error as Error;
+        console.error("searchPatients error:", error);
+        return [];
     }
 }
 
@@ -110,11 +128,11 @@ export async function countPatients(): Promise<number> {
         const stmt = db.prepare(`
         SELECT COUNT(*) as count FROM patients
     `);
-        const result: any = stmt.get();
-        return result.count as number;
+        const result = stmt.get() as { count: number };
+        return result.count;
     } catch (error) {
-        console.log(error);
-        throw error as Error;
+        console.error("countPatients error:", error);
+        return 0;
     }
 }
 

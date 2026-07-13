@@ -219,7 +219,7 @@ export default function Authentification() {
     useEffect(() => {
         (async () => {
             try {
-                const result = await (window as any).ipcRenderer.checkAuth();
+                const result = await window.ipcRenderer.checkAuth();
                 if (result?.status === 'success') {
                     navigate('/dashboard', { replace: true });
                 }
@@ -256,7 +256,7 @@ export default function Authentification() {
         setIsLoading(true);
 
         try {
-            const result = await (window as any).ipcRenderer.login(fullName, password, stayLogged);
+            const result = await window.ipcRenderer.login(fullName, password, stayLogged);
             if (result?.status === 'success') {
                 navigate('/dashboard', { replace: true });
             } else {
@@ -292,7 +292,7 @@ export default function Authentification() {
         setIsLoading(true);
 
         try {
-            const result = await (window as any).ipcRenderer.createUser({
+            const result = await window.ipcRenderer.createUser({
                 fullName,
                 password,
                 role,

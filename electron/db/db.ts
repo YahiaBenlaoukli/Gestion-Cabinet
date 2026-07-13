@@ -34,6 +34,7 @@ export function initializeDatabase(): Database.Database {
       phone_number TEXT,
       ssn TEXT UNIQUE,
       blood_type TEXT CHECK(blood_type IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', NULL)),
+      notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -115,9 +116,21 @@ export function initializeDatabase(): Database.Database {
     );
   `);
 
-  // If this is a fresh install, set it to the newest version (5)
+  // If this is a fresh install, set it to the newest version (6)
   if (version === 0) {
-    db.pragma('user_version = 5');
+    db.pragma('user_version = 6');
+  }
+
+  // v6: patients.notes — the follow-up notes tab used to write a field that
+  // had no column, so the text silently vanished on restart.
+  if (version > 0 && version < 6) {
+    try {
+      db.exec(`ALTER TABLE patients ADD COLUMN notes TEXT`);
+    } catch (error) {
+      // Column already exists (e.g. fresh table created above) — fine.
+      console.error("patients.notes migration:", error);
+    }
+    db.pragma('user_version = 6');
   }
 
   // Run auto-linking for prescriptions that have PDFs but were created before the foreign key link was implemented
@@ -143,8 +156,14 @@ export function initializeDatabase(): Database.Database {
 function syncMissedAppointments() {
   try {
     const db = getDatabase();
+    // Appointments are stored as timezone-naive LOCAL strings
+    // ('YYYY-MM-DDTHH:MM:SS'), so compare against local time in the same
+    // format — toISOString() would be UTC and off by the timezone offset.
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const localNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     const stmt = db.prepare(`UPDATE appointments SET status = 'No-Show' WHERE appointment_datetime < ? AND status = 'Scheduled'`);
-    const result = stmt.run(new Date().toISOString());
+    const result = stmt.run(localNow);
     return result;
   } catch (error) {
     console.error("syncMissedAppointments error:", error);

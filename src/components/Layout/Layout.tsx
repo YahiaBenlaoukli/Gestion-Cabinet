@@ -1,18 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import Sidebar from '../Sidebar/Sidebar'
-
-interface LayoutContextType {
-  collapsed: boolean
-  setCollapsed: React.Dispatch<React.SetStateAction<boolean>>
-}
-
-const LayoutContext = createContext<LayoutContextType>({
-  collapsed: false,
-  setCollapsed: () => { },
-})
-
-export const useLayout = () => useContext(LayoutContext)
+import { LayoutContext } from './LayoutContext'
 
 interface LayoutProps {
   children: React.ReactNode

@@ -100,7 +100,7 @@ const icons = {
     )
 };
 
-function formatBytes(bytes: number, t: any, decimals = 2) {
+function formatBytes(bytes: number, t: (key: string) => string, decimals = 2) {
     if (!bytes || bytes === 0) return '—';
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
@@ -161,8 +161,8 @@ export default function Documents() {
     const loadDocuments = async () => {
         try {
             setIsLoading(true);
-            const data = await (window as any).ipcRenderer.getAllDocuments();
-            setDocuments(data || []);
+            const data = await window.ipcRenderer.getAllDocuments();
+            setDocuments((data || []) as PatientDocumentDetail[]);
         } catch (e) {
             console.error('Error loading documents:', e);
         } finally {
@@ -194,7 +194,7 @@ export default function Documents() {
         const timer = setTimeout(async () => {
             setIsSearchingPatient(true);
             try {
-                const results = await (window as any).ipcRenderer.searchPatient(patientSearchQuery);
+                const results = await window.ipcRenderer.searchPatient(patientSearchQuery);
                 setPatientSearchResults(results || []);
                 setShowPatientDropdown(true);
             } catch (e) {
@@ -243,11 +243,11 @@ export default function Documents() {
 
         setIsUploading(true);
         try {
-            // In Electron, HTML5 File object has .path property
-            const localPath = (selectedFile as any).path;
+            // In Electron, the HTML5 File object carries the absolute path
+            const localPath = (selectedFile as File & { path: string }).path;
             const fileName = selectedFile.name;
 
-            const result = await (window as any).ipcRenderer.uploadDocument({
+            const result = await window.ipcRenderer.uploadDocument({
                 patientId: selectedPatient.id,
                 prescriptionId: null,
                 fileCategory: uploadCategory,
@@ -278,7 +278,11 @@ export default function Documents() {
     const handleDeleteDocument = async (id: number) => {
         if (!window.confirm(t('documents.alerts.delete_confirm'))) return;
         try {
-            await (window as any).ipcRenderer.deleteDocument(id);
+            const result = await window.ipcRenderer.deleteDocument(id);
+            if (result?.status !== 'success') {
+                showError(result?.message || t('documents.alerts.delete_error'));
+                return;
+            }
             showSuccess(t('documents.alerts.delete_success'));
             setDocuments(prev => prev.filter(d => d.id !== id));
         } catch (e) {
@@ -290,7 +294,7 @@ export default function Documents() {
     /* ── Open document ── */
     const handleOpenDocument = async (filePath: string) => {
         try {
-            const error = await (window as any).ipcRenderer.openDocument(filePath);
+            const error = await window.ipcRenderer.openDocument(filePath);
             if (error) {
                 showError(t('documents.alerts.open_error', { error }));
             }

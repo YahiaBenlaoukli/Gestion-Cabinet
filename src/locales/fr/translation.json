@@ -305,7 +305,17 @@
       "profile": "Profil Professionnel",
       "consultation": "Consultations & RDV",
       "security": "Sécurité & Session",
-      "data": "Sauvegarde & Données"
+      "data": "Sauvegarde & Données",
+      "license": "Licence"
+    },
+    "license": {
+      "title": "Licence",
+      "subtitle": "Activez votre clé de licence pour débloquer la version complète.",
+      "status_licensed": "Version complète activée",
+      "status_licensed_hint": "Votre licence est active. Merci d'utiliser Ausculta !",
+      "warning_title": "Votre essai se termine dans {{days}} jours !",
+      "warning_text": "À l'expiration de l'essai, Ausculta se verrouille complètement : vos dossiers patients, rendez-vous et documents seront inaccessibles jusqu'à l'activation d'une licence. Ne perdez pas l'accès à vos données — activez maintenant.",
+      "warning_countdown": "{{days}} jours restants sur {{total}}"
     },
     "profile": {
       "title": "Profil du Médecin",
@@ -545,5 +555,20 @@
         "surgery": "Chirurgie"
       }
     }
+  },
+  "trial": {
+    "days_remaining": "Essai : {{days}} jours restants",
+    "expired_title": "Période d'essai terminée",
+    "expired_subtitle": "Votre essai gratuit de 14 jours est arrivé à son terme. Entrez votre clé de licence pour continuer à utiliser Ausculta.",
+    "license_label": "Clé de licence",
+    "license_placeholder": "Collez votre clé de licence ici",
+    "activate": "Activer la licence",
+    "activating": "Activation...",
+    "error_invalid": "Clé de licence invalide.",
+    "error_connection": "Erreur lors de l'activation. Veuillez réessayer.",
+    "success": "Licence activée. Merci !",
+    "contact": "Pour obtenir une clé de licence, contactez-nous.",
+    "activate_title": "Activer votre licence",
+    "activate_now": "Activer maintenant"
   }
 }

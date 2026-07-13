@@ -2,17 +2,43 @@ import { app, safeStorage } from "electron";
 import { getDatabase } from "../db/db";
 import type { User } from "../../types/user";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
 
-// Load .env from the electron directory (__dirname equivalent for ESM)
+// Load .env — the code runs from the bundled dist-electron/main.js, so
+// "../.env" points at the repo root; the actual file lives in electron/.env.
+// dotenv never overrides already-set vars, so trying both paths is safe.
 const __authDirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__authDirname, "../electron/.env") });
 dotenv.config({ path: path.join(__authDirname, "../.env") });
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "fallback-secret-change-me";
+// Packaged installs don't ship electron/.env, so instead of a hardcoded
+// fallback (which would be the same for every install and visible in the
+// bundle), generate a random per-install secret once and keep it in the
+// user-data dir. Tokens only ever live on this machine, so rotating the
+// secret (e.g. file deleted) just means one re-login.
+function resolveJwtSecret(): string {
+    if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+    const secretPath = path.join(app.getPath("userData"), "jwt-secret");
+    try {
+        const existing = fs.readFileSync(secretPath, "utf8").trim();
+        if (existing) return existing;
+    } catch {
+        // First run: no secret yet.
+    }
+    const secret = crypto.randomBytes(32).toString("hex");
+    try {
+        fs.writeFileSync(secretPath, secret, { mode: 0o600 });
+    } catch (error) {
+        console.error("Failed to persist JWT secret:", error);
+    }
+    return secret;
+}
+const JWT_SECRET = resolveJwtSecret();
 const TOKEN_PATH = path.join(app.getPath("userData"), "token.enc");
 let sessionToken: string | null = null;
 

@@ -294,7 +294,7 @@ async function fillTemplate(
 
         return { status: "success", pdfPath: outputPath };
     } catch (error) {
-        return { status: "fail", message: error as string };
+        return { status: "fail", message: (error as Error).message };
     }
 }
 
@@ -421,10 +421,11 @@ export async function searchPrescription(query: string) {
         const stmt = db.prepare(`
             SELECT DISTINCT p.* FROM prescriptions p
             LEFT JOIN prescription_medicines pm ON pm.prescription_id = p.id
-            WHERE pm.medicine_name LIKE ? OR pm.dosage LIKE ? OR pm.frequency LIKE ? OR pm.duration LIKE ? OR p.notes LIKE ?
+            WHERE pm.medicine_name LIKE ? ESCAPE '\\' OR pm.dosage LIKE ? ESCAPE '\\' OR pm.frequency LIKE ? ESCAPE '\\' OR pm.duration LIKE ? ESCAPE '\\' OR p.notes LIKE ? ESCAPE '\\'
             ORDER BY p.created_at DESC
         `);
-        const rows = stmt.all(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`) as Record<string, unknown>[];
+        const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+        const rows = stmt.all(pattern, pattern, pattern, pattern, pattern) as Record<string, unknown>[];
         const result = rows.map(row => hydratePrescription(db, row));
         return { status: "success", data: result };
     } catch (error) {
@@ -520,7 +521,7 @@ async function fillPatientPrescriptionTemplate(
     }
 }
 
-function drawPatientInformation(page: PDFPage, patient: Patient, helveticaFontBold: PDFFont, helveticaFont: PDFFont, _width: number, height: number, weight?: string) {
+function drawPatientInformation(page: PDFPage, patient: Patient, helveticaFontBold: PDFFont, _helveticaFont: PDFFont, _width: number, height: number, weight?: string) {
     const dayOfConsultationText = new Date().toLocaleDateString('en-GB');
     page.drawText(dayOfConsultationText, {
         x: 67,
@@ -575,47 +576,60 @@ function drawPatientInformation(page: PDFPage, patient: Patient, helveticaFontBo
 function drawPrescriptions(page: PDFPage, prescriptions: Prescription[], helveticaFontBold: PDFFont, helveticaFont: PDFFont, width: number, height: number) {
     const marginX = 30;
     const rightMargin = 35;
+    // Keep above the signature block: stop before running off the page.
+    const bottomLimit = 120;
     let currentY = height - 315;
 
+    const allMedicines = prescriptions.flatMap(p => p.medicines);
     let medIndex = 1;
-    for (const prescription of prescriptions) {
-        for (const med of prescription.medicines) {
-            // Top line: index + medicine name (left), quantity badge (far right)
-            const nameText = `${medIndex}.  ${med.medicineName}`;
-            page.drawText(nameText, {
+    for (const med of allMedicines) {
+        // Each entry needs ~45pt (name line + detail line + spacing).
+        if (currentY - 45 < bottomLimit) {
+            const remaining = allMedicines.length - (medIndex - 1);
+            page.drawText(`+ ${remaining} autre(s) médicament(s) — voir dossier`, {
                 x: marginX,
-                y: currentY,
-                size: 13,
-                font: helveticaFontBold,
-                color: rgb(0, 0, 0),
-            });
-
-            const quantityText = `Qté : ${med.quantity}`;
-            const quantitySize = 11;
-            const quantityWidth = helveticaFontBold.widthOfTextAtSize(quantityText, quantitySize);
-            page.drawText(quantityText, {
-                x: width - rightMargin - quantityWidth,
-                y: currentY,
-                size: quantitySize,
-                font: helveticaFontBold,
-                color: rgb(0, 0, 0),
-            });
-
-            currentY -= 17;
-
-            // Detail line: dosage, frequency and duration
-            const detailsLine = `${med.dosage}  -  ${med.frequency}  -  Durée : ${med.duration}`;
-            page.drawText(detailsLine, {
-                x: marginX + 16,
                 y: currentY,
                 size: 10,
                 font: helveticaFont,
                 color: rgb(0.3, 0.3, 0.3),
             });
-
-            currentY -= 28;
-            medIndex++;
+            break;
         }
+        // Top line: index + medicine name (left), quantity badge (far right)
+        const nameText = `${medIndex}.  ${med.medicineName}`;
+        page.drawText(nameText, {
+            x: marginX,
+            y: currentY,
+            size: 13,
+            font: helveticaFontBold,
+            color: rgb(0, 0, 0),
+        });
+
+        const quantityText = `Qté : ${med.quantity}`;
+        const quantitySize = 11;
+        const quantityWidth = helveticaFontBold.widthOfTextAtSize(quantityText, quantitySize);
+        page.drawText(quantityText, {
+            x: width - rightMargin - quantityWidth,
+            y: currentY,
+            size: quantitySize,
+            font: helveticaFontBold,
+            color: rgb(0, 0, 0),
+        });
+
+        currentY -= 17;
+
+        // Detail line: dosage, frequency and duration
+        const detailsLine = `${med.dosage}  -  ${med.frequency}  -  Durée : ${med.duration}`;
+        page.drawText(detailsLine, {
+            x: marginX + 16,
+            y: currentY,
+            size: 10,
+            font: helveticaFont,
+            color: rgb(0.3, 0.3, 0.3),
+        });
+
+        currentY -= 28;
+        medIndex++;
     }
 }
 

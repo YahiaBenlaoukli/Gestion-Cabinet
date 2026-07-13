@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Patient } from '../../../types/patient';
 import type { PatientDocument } from '../../../types/documents';
@@ -137,43 +137,43 @@ export default function PatientDetails() {
         navigate(-1);
     };
 
-    const fetchPatientData = async () => {
+    const fetchPatientData = useCallback(async () => {
         if (!id) return;
         try {
             setIsLoading(true);
-            const patient = await window.ipcRenderer.invoke('get-patient-by-id', Number(id));
+            const patient = await window.ipcRenderer.getPatientById(Number(id));
             setPatientData(patient);
             setNotes(patient?.notes || '');
 
-            const docs = await window.ipcRenderer.invoke('get-documents-by-patient-id', Number(id));
+            const docs = await window.ipcRenderer.getDocumentsByPatientId(Number(id));
             setDocuments(docs || []);
 
-            const prescriptionsResult = await (window as any).ipcRenderer.getPatientPrescriptions(Number(id));
+            const prescriptionsResult = await window.ipcRenderer.getPatientPrescriptions(Number(id));
             if (prescriptionsResult.status === 'success') {
                 setPrescriptions(prescriptionsResult.data || []);
             }
 
-            const appointmentsResult = await (window as any).ipcRenderer.getAppointmentsByPatientId(Number(id));
-            setAppointments(Array.isArray(appointmentsResult) ? appointmentsResult : []);
+            const appointmentsResult = await window.ipcRenderer.getAppointmentsByPatientId(Number(id));
+            setAppointments(Array.isArray(appointmentsResult) ? (appointmentsResult as Appointment[]) : []);
         } catch (error) {
             console.error("Error fetching patient details:", error);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchPatientData();
-    }, [id]);
+    }, [fetchPatientData]);
 
 
 
     const handleDeleteDoc = async (docId: number) => {
         if (!confirm("Voulez-vous supprimer ce document ?")) return;
         try {
-            await window.ipcRenderer.invoke('delete-document', docId);
+            await window.ipcRenderer.deleteDocument(docId);
             // Refresh documents
-            const docs = await window.ipcRenderer.invoke('get-documents-by-patient-id', Number(id));
+            const docs = await window.ipcRenderer.getDocumentsByPatientId(Number(id));
             setDocuments(docs || []);
         } catch (error) {
             console.error("Error deleting document:", error);
@@ -188,7 +188,7 @@ export default function PatientDetails() {
                 ...patientData,
                 notes: notes
             };
-            await window.ipcRenderer.invoke('update-patient', updatedPatient);
+            await window.ipcRenderer.updatePatient(updatedPatient);
             setPatientData(updatedPatient);
         } catch (error) {
             console.error("Error updating patient notes:", error);
@@ -405,7 +405,7 @@ export default function PatientDetails() {
                 ].map((tab) => (
                     <button
                         key={tab.key}
-                        onClick={() => setActiveTab(tab.key as any)}
+                        onClick={() => setActiveTab(tab.key as typeof activeTab)}
                         className={`pb-3 text-sm font-semibold transition-all relative cursor-pointer ${activeTab === tab.key ? 'text-pink' : 'text-navy/40 hover:text-navy/70'}`}
                     >
                         {tab.label}

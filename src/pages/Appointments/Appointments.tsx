@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import type { Patient } from "../../../types/patient"
@@ -50,7 +50,7 @@ export default function Appointments() {
     useEffect(() => {
         (async () => {
             try {
-                const auth = await (window as any).ipcRenderer.checkAuth();
+                const auth = await window.ipcRenderer.checkAuth();
                 if (auth?.status === 'success' && auth.user?.id) {
                     setCurrentUserId(auth.user.id);
                 } else {
@@ -68,7 +68,7 @@ export default function Appointments() {
         if (currentUserId !== null) {
             (async () => {
                 try {
-                    const profileResult = await (window as any).ipcRenderer.invoke('get-doctor-profile', currentUserId);
+                    const profileResult = await window.ipcRenderer.getDoctorProfile(currentUserId);
                     if (profileResult.status === 'success' && profileResult.data) {
                         setDoctorProfile(profileResult.data);
                     }
@@ -88,13 +88,13 @@ export default function Appointments() {
     }, [selectedDate]);
 
     // Load Appointments for selected day
-    const loadAppointments = async () => {
+    const loadAppointments = useCallback(async () => {
         if (!doctorProfile) return;
         setLoading(true);
         try {
-            const data = await (window as any).ipcRenderer.getAppointmentsByDay(doctorProfile.id, selectedDateQueryStr);
+            const data = await window.ipcRenderer.getAppointmentsByDay(doctorProfile.id, selectedDateQueryStr);
             if (Array.isArray(data)) {
-                setAppointments(data);
+                setAppointments(data as Appointment[]);
             } else {
                 setAppointments([]);
             }
@@ -104,13 +104,13 @@ export default function Appointments() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [doctorProfile, selectedDateQueryStr]);
 
     useEffect(() => {
         if (doctorProfile) {
             loadAppointments();
         }
-    }, [doctorProfile, selectedDateQueryStr]);
+    }, [doctorProfile, loadAppointments]);
 
     // Handle redirection parameter
     useEffect(() => {
@@ -163,7 +163,7 @@ export default function Appointments() {
         const timer = setTimeout(async () => {
             setIsSearchingPatient(true);
             try {
-                const res = await (window as any).ipcRenderer.invoke('search-patients', patientSearchQuery);
+                const res = await window.ipcRenderer.searchPatient(patientSearchQuery);
                 if (Array.isArray(res)) {
                     setPatientSearchResults(res);
                 } else {
@@ -203,7 +203,7 @@ export default function Appointments() {
         setErrorMessage("");
         try {
             const datetimeStr = `${selectedDateQueryStr}T${selectedTime}:00`;
-            const result = await (window as any).ipcRenderer.bookAppointment(
+            const result = await window.ipcRenderer.bookAppointment(
                 selectedPatient.id,
                 doctorProfile.id,
                 datetimeStr,
@@ -229,7 +229,7 @@ export default function Appointments() {
     // Update Status
     const handleUpdateStatus = async (id: number, status: string) => {
         try {
-            const result = await (window as any).ipcRenderer.updateAppointment(id, status);
+            const result = await window.ipcRenderer.updateAppointment(id, status);
             if (result.status === "success") {
                 loadAppointments();
             }
@@ -242,7 +242,7 @@ export default function Appointments() {
     const handleDeleteAppointment = async (id: number) => {
         if (!confirm(t('appointments.confirm_delete'))) return;
         try {
-            const result = await (window as any).ipcRenderer.deleteAppointment(id);
+            const result = await window.ipcRenderer.deleteAppointment(id);
             if (result.status === "success") {
                 loadAppointments();
             }

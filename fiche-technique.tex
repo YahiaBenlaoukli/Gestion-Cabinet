@@ -1,0 +1,152 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---- Encodage & langue ----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% ---- Mise en page ----
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+
+% ---- Couleurs sobres ----
+\definecolor{primary}{HTML}{2C5F8A}
+\definecolor{lightgray}{HTML}{F2F4F7}
+
+% ---- En-tête / pied de page ----
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small\textcolor{primary}{Ausculta}}
+\rhead{\small Fiche technique}
+\cfoot{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---- Style des titres ----
+\titleformat{\section}
+  {\normalfont\large\bfseries\color{primary}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries}{\thesubsection}{0.6em}{}
+
+\setlist[itemize]{leftmargin=1.4em,itemsep=2pt,topsep=3pt}
+
+\begin{document}
+
+% ================= EN-TÊTE =================
+\begin{center}
+  {\Huge\bfseries\color{primary} Ausculta}\\[4pt]
+  {\large Logiciel de gestion de cabinet médical}\\[2pt]
+  \textit{Fiche technique}\\[6pt]
+  \small Version 0.0.0 \quad\textbullet\quad \today
+\end{center}
+
+\vspace{4pt}
+\hrule
+\vspace{10pt}
+
+% ================= PRÉSENTATION =================
+\section{Présentation}
+
+\textbf{Ausculta} est une application de bureau destinée aux médecins
+exerçant en cabinet privé. Elle centralise la gestion des patients, des
+rendez-vous, des ordonnances, des documents médicaux et des statistiques
+d'activité au sein d'une interface unique.
+
+\medskip
+L'application est \textbf{100\% hors-ligne} : toutes les données sont
+stockées localement sur le poste du praticien, sans serveur distant ni
+connexion Internet requise. La confidentialité des données médicales est
+ainsi garantie par conception.
+
+% ================= FONCTIONNALITÉS =================
+\section{Fonctionnalités principales}
+
+\subsection*{Gestion des patients}
+\begin{itemize}
+  \item Création, consultation, modification et suppression des fiches patients.
+  \item Recherche rapide par nom ou par critère.
+  \item Fiche détaillée regroupant informations personnelles, historique
+        des rendez-vous, ordonnances et documents.
+\end{itemize}
+
+\subsection*{Rendez-vous}
+\begin{itemize}
+  \item Prise de rendez-vous avec date, heure, durée et motif de consultation.
+  \item Agenda journalier et vue par plage de dates.
+  \item Gestion des statuts (planifié, annulé, honoré, absence).
+  \item Détection automatique des rendez-vous manqués au démarrage.
+\end{itemize}
+
+\subsection*{Ordonnances}
+\begin{itemize}
+  \item Rédaction d'ordonnances multi-médicaments (dosage, fréquence,
+        quantité, durée, notes).
+  \item Génération automatique d'ordonnances au format PDF à partir d'un
+        modèle personnalisé.
+  \item Historique complet des prescriptions par patient.
+\end{itemize}
+
+\subsection*{Documents médicaux}
+\begin{itemize}
+  \item Importation et archivage des documents liés à chaque patient.
+  \item Ouverture directe des fichiers depuis l'application.
+  \item Rattachement automatique des ordonnances générées à la fiche patient.
+\end{itemize}
+
+\subsection*{Statistiques \& tableau de bord}
+\begin{itemize}
+  \item Statistiques financières et volume de consultations sur une période.
+  \item Taux d'absentéisme (\textit{no-show}) et suivi de l'activité.
+  \item Tableau de bord synthétique et graphiques interactifs.
+\end{itemize}
+
+\subsection*{Profil \& paramètres}
+\begin{itemize}
+  \item Profil du médecin (nom, spécialité, coordonnées) utilisé sur les
+        ordonnances.
+  \item Interface multilingue : français, anglais et arabe (support
+        d'affichage de droite à gauche).
+  \item Authentification sécurisée et session persistante optionnelle.
+\end{itemize}
+
+% ================= CE QUE L'APP APPORTE =================
+\section{Ce que l'application apporte}
+\begin{itemize}
+  \item \textbf{Gain de temps} : centralisation de toutes les tâches
+        administratives du cabinet.
+  \item \textbf{Sécurité} : données médicales stockées et chiffrées
+        localement, sans exposition réseau.
+  \item \textbf{Simplicité} : interface claire, sans configuration
+        technique ni maintenance de serveur.
+  \item \textbf{Accessibilité} : disponible en trois langues et adaptée aux
+        besoins des cabinets francophones et arabophones.
+\end{itemize}
+
+% ================= FICHE TECHNIQUE =================
+\section{Caractéristiques techniques}
+
+\renewcommand{\arraystretch}{1.4}
+\begin{center}
+\begin{tabular}{>{\raggedright}p{4.5cm} p{9.5cm}}
+\toprule
+\textbf{Type d'application} & Logiciel de bureau (Windows, macOS, Linux) \\
+\textbf{Technologies} & Electron, React, TypeScript \\
+\textbf{Base de données} & SQLite locale (hors-ligne) \\
+\textbf{Sécurité} & Mots de passe chiffrés (bcrypt), jetons JWT, stockage sécurisé \\
+\textbf{Génération PDF} & Ordonnances via modèle personnalisable \\
+\textbf{Langues} & Français, Anglais, Arabe (RTL) \\
+\textbf{Installation} & Installateur Windows (NSIS), image macOS (dmg), AppImage (Linux) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{12pt}
+\begin{center}
+\small\textcolor{primary}{Ausculta — Simplifiez la gestion de votre cabinet médical.}
+\end{center}
+
+\end{document}

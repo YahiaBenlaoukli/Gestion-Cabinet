@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ResponsiveContainer,
@@ -114,35 +114,21 @@ export default function Statistics() {
   const [consultationVolume, setConsultationVolume] = useState<MonthlyVolume[]>([]);
 
   // Load all statistics from backend APIs
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
       const parsedPrice = parseFloat(priceInput) || 0;
 
-      // Invoke Electron backend services
-      const appStatsResult = await window.ipcRenderer.invoke(
-        "get-appointment-statistics",
-        startDate,
-        endDate,
-        parsedPrice
-      );
+      const [appStatsResult, noShowResult, volumeResult] = await Promise.all([
+        window.ipcRenderer.getAppointmentStatistics(startDate, endDate, parsedPrice),
+        window.ipcRenderer.getNoShowRate(startDate, endDate),
+        window.ipcRenderer.getConsultationVolume(startDate, endDate),
+      ]);
 
-      const noShowResult = await window.ipcRenderer.invoke(
-        "get-noshow-rate",
-        startDate,
-        endDate
-      );
-
-      const volumeResult = await window.ipcRenderer.invoke(
-        "get-consultation-volume",
-        startDate,
-        endDate
-      );
-
-      if (appStatsResult && !appStatsResult.status) {
+      if (appStatsResult) {
         setAppointmentStats(appStatsResult);
       }
-      if (noShowResult && !noShowResult.status) {
+      if (noShowResult) {
         setNoShowRateData(noShowResult);
       }
       if (Array.isArray(volumeResult)) {
@@ -153,11 +139,11 @@ export default function Statistics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate, priceInput]);
 
   useEffect(() => {
     fetchStats();
-  }, [startDate, endDate, priceInput]);
+  }, [fetchStats]);
 
   // Handle Quick Range Button Clicks
   const handleRangeChange = (range: string) => {

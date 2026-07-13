@@ -12,25 +12,28 @@ import Authentification from './pages/Authentification/Authentification'
 import Documents from './pages/Documents/Documents'
 import Statistics from './pages/Statistics/Statistics'
 import Parameters from './pages/Parameters/Parameters'
+import TrialGate from './components/TrialGate/TrialGate'
 import './services/i18n';
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Authentification />} />
+    <TrialGate>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Authentification />} />
 
-        <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-        <Route path="/patients" element={<Layout><Patients /></Layout>} />
-        <Route path="/patients/:id" element={<Layout><PatientDetails /></Layout>} />
-        <Route path="/prescriptions" element={<Layout><Prescriptions /></Layout>} />
-        <Route path="/documents" element={<Layout><Documents /></Layout>} />
-        <Route path="/appointments" element={<Layout><Appointments /></Layout>} />
-        <Route path="/statistics" element={<Layout><Statistics /></Layout>} />
-        <Route path="/settings" element={<Layout><Parameters /></Layout>} />
-      </Routes>
-    </HashRouter>
+          <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+          <Route path="/patients" element={<Layout><Patients /></Layout>} />
+          <Route path="/patients/:id" element={<Layout><PatientDetails /></Layout>} />
+          <Route path="/prescriptions" element={<Layout><Prescriptions /></Layout>} />
+          <Route path="/documents" element={<Layout><Documents /></Layout>} />
+          <Route path="/appointments" element={<Layout><Appointments /></Layout>} />
+          <Route path="/statistics" element={<Layout><Statistics /></Layout>} />
+          <Route path="/settings" element={<Layout><Parameters /></Layout>} />
+        </Routes>
+      </HashRouter>
+    </TrialGate>
   </React.StrictMode>,
 )
 

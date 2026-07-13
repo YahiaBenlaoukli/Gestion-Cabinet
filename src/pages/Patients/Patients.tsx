@@ -83,7 +83,7 @@ function formatDate(dateStr: string, locale: string = 'fr') {
     } catch { return dateStr }
 }
 
-function getRelativeTime(dateStr: string, t: any) {
+function getRelativeTime(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string) {
     if (!dateStr) return ''
     try {
         const now = new Date()
@@ -144,7 +144,7 @@ export default function Patients() {
     const getAllPatients = async () => {
         try {
             setLoading(true)
-            const data = await window.ipcRenderer.invoke('get-all-patients')
+            const data = await window.ipcRenderer.getAllPatients()
             setPatients(data)
         } catch (error) {
             console.log(error)
@@ -155,7 +155,7 @@ export default function Patients() {
 
     const addPatient = async (newPatient: Omit<Patient, 'id' | 'createdAt'>) => {
         try {
-            await window.ipcRenderer.invoke('add-patient', newPatient)
+            await window.ipcRenderer.addPatient(newPatient)
             await getAllPatients()
             setShowAddModal(false)
         } catch (error) {
@@ -165,7 +165,7 @@ export default function Patients() {
 
     const deletePatient = async (id: number) => {
         try {
-            await window.ipcRenderer.invoke('delete-patient', id)
+            await window.ipcRenderer.deletePatient(id)
             await getAllPatients()
             setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n })
         } catch (error) {

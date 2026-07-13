@@ -305,7 +305,17 @@
       "profile": "Professional Profile",
       "consultation": "Consultations & Appts",
       "security": "Security & Session",
-      "data": "Backup & Database"
+      "data": "Backup & Database",
+      "license": "License"
+    },
+    "license": {
+      "title": "License",
+      "subtitle": "Activate your license key to unlock the full version.",
+      "status_licensed": "Full version activated",
+      "status_licensed_hint": "Your license is active. Thank you for using Ausculta!",
+      "warning_title": "Your trial ends in {{days}} days!",
+      "warning_text": "When the trial expires, Ausculta locks completely: your patient records, appointments and documents will be inaccessible until a license is activated. Don't get locked out of your data — activate now.",
+      "warning_countdown": "{{days}} of {{total}} days remaining"
     },
     "profile": {
       "title": "Doctor Profile",
@@ -545,5 +555,20 @@
         "surgery": "Surgery"
       }
     }
+  },
+  "trial": {
+    "days_remaining": "Trial: {{days}} days left",
+    "expired_title": "Trial period expired",
+    "expired_subtitle": "Your 14-day free trial has ended. Enter your license key to keep using Ausculta.",
+    "license_label": "License key",
+    "license_placeholder": "Paste your license key here",
+    "activate": "Activate license",
+    "activating": "Activating...",
+    "error_invalid": "Invalid license key.",
+    "error_connection": "Activation failed. Please try again.",
+    "success": "License activated. Thank you!",
+    "contact": "To get a license key, contact us.",
+    "activate_title": "Activate your license",
+    "activate_now": "Activate now"
   }
 }

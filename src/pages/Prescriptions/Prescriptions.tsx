@@ -76,7 +76,7 @@ const icons = {
 };
 
 
-function formatDateGroup(dateStr: string, currentLang: string, t: any) {
+function formatDateGroup(dateStr: string, currentLang: string, t: (key: string) => string) {
     if (!dateStr) return '—';
     try {
         const d = new Date(dateStr);
@@ -135,7 +135,7 @@ export default function Prescriptions() {
     useEffect(() => {
         (async () => {
             try {
-                const auth = await (window as any).ipcRenderer.checkAuth();
+                const auth = await window.ipcRenderer.checkAuth();
                 if (auth?.status === 'success' && auth.user?.id) {
                     setCurrentUserId(auth.user.id);
                 } else {
@@ -153,7 +153,7 @@ export default function Prescriptions() {
 
     const loadData = async (userId: number) => {
         try {
-            const profileResult = await (window as any).ipcRenderer.invoke('get-doctor-profile', userId);
+            const profileResult = await window.ipcRenderer.getDoctorProfile(userId);
             if (profileResult.status === 'success' && profileResult.data) {
                 setDoctorProfile(profileResult.data);
                 setStep(profileResult.data.pdfPath ? 'prescriptions' : 'generate-pdf');
@@ -178,7 +178,7 @@ export default function Prescriptions() {
         const timer = setTimeout(async () => {
             setIsSearchingPatient(true);
             try {
-                const results = await (window as any).ipcRenderer.searchPatient(patientSearchQuery);
+                const results = await window.ipcRenderer.searchPatient(patientSearchQuery);
                 setPatientSearchResults(results || []);
                 setShowPatientDropdown(true);
             } catch (e) {
@@ -195,12 +195,12 @@ export default function Prescriptions() {
 
     /* ── Create doctor profile ── */
     const handleCreateProfile = async (form: { fullName: string; speciality: string; phoneNumber: string; address: string; email: string }) => {
+        if (currentUserId === null) return;
         try {
-            const result = await (window as any).ipcRenderer.invoke(
-                'create-doctor-profile',
+            const result = await window.ipcRenderer.createDoctorProfile(
                 currentUserId, form.fullName, form.speciality, form.phoneNumber, form.address, form.email
             );
-            if (result.status === 'success') {
+            if (result.status === 'success' && result.data) {
                 setDoctorProfile(result.data);
                 setStep('generate-pdf');
                 setShowProfileModal(false);
@@ -220,9 +220,10 @@ export default function Prescriptions() {
         if (!doctorProfile) return;
         try {
             setIsGeneratingPdf(true);
-            const result = await (window as any).ipcRenderer.invoke('set-prescription-pdf', doctorProfile.id);
-            if (result.status === 'success') {
-                setDoctorProfile(prev => prev ? { ...prev, pdfPath: result.data.pdfPath } : null);
+            const result = await window.ipcRenderer.setPrescriptionPdf(doctorProfile.id);
+            if (result.status === 'success' && result.data) {
+                const pdfPath = result.data.pdfPath;
+                setDoctorProfile(prev => prev ? { ...prev, pdfPath } : null);
                 setStep('prescriptions');
                 showSuccess(t('prescriptions.alerts.pdf_success'));
             }
@@ -237,8 +238,8 @@ export default function Prescriptions() {
     const loadPatientPrescriptions = async (patientId: number) => {
         try {
             const [prescResult, docsResult] = await Promise.all([
-                (window as any).ipcRenderer.getPatientPrescriptions(patientId),
-                (window as any).ipcRenderer.invoke('get-documents-by-patient-id', patientId),
+                window.ipcRenderer.getPatientPrescriptions(patientId),
+                window.ipcRenderer.getDocumentsByPatientId(patientId),
             ]);
             if (prescResult.status === 'success') {
                 setPatientPrescriptions(prescResult.data || []);
@@ -289,23 +290,21 @@ export default function Prescriptions() {
         setIsSaving(true);
         try {
             // Create a single prescription with all medicines
-            const result = await (window as any).ipcRenderer.invoke(
-                'add-prescription',
+            const result = await window.ipcRenderer.addPrescription(
                 currentUserId,
                 selectedPatient.id,
                 newMedications,
             );
 
-            if (result.status === 'success') {
+            if (result.status === 'success' && result.data) {
                 // Load the full prescription (with medicines) for PDF generation
-                const prescriptionResult = await (window as any).ipcRenderer.invoke(
-                    'get-prescription-by-id',
+                const prescriptionResult = await window.ipcRenderer.getPrescriptionById(
                     result.data.prescriptionId,
                     selectedPatient.id
                 );
 
                 // Generate PDF automatically after saving
-                if (doctorProfile && prescriptionResult.status === 'success') {
+                if (doctorProfile && prescriptionResult.status === 'success' && prescriptionResult.data) {
                     await handleGeneratePatientPdf([prescriptionResult.data.prescription]);
                 }
 
@@ -333,16 +332,16 @@ export default function Prescriptions() {
         }
         setIsGeneratingPatientPdf(true);
         try {
-            const result = await (window as any).ipcRenderer.generatePatientPrescriptionPDF(
+            const result = await window.ipcRenderer.generatePatientPrescriptionPDF(
                 selectedPatient.id,
                 medsToUse,
                 doctorProfile,
                 weight || undefined
             );
-            if (result.status === 'success') {
+            if (result.status === 'success' && result.data) {
                 showSuccess(t('prescriptions.alerts.pdf_generate_success'));
                 // Auto-open the generated PDF
-                await (window as any).ipcRenderer.openDocument(result.data);
+                await window.ipcRenderer.openDocument(result.data);
             } else {
                 showError(result.message ? t('prescriptions.alerts.pdf_generate_error', { message: result.message }) : t('prescriptions.alerts.pdf_generate_error_default'));
             }
@@ -357,7 +356,7 @@ export default function Prescriptions() {
     /* ── Delete prescription ── */
     const handleDeletePrescription = async (id: number) => {
         try {
-            await (window as any).ipcRenderer.invoke('delete-prescription', id);
+            await window.ipcRenderer.deletePrescription(id);
             setPatientPrescriptions(prev => prev.filter(p => p.id !== id));
             showSuccess(t('prescriptions.alerts.delete_success'));
         } catch (e) {
@@ -540,7 +539,7 @@ export default function Prescriptions() {
                             <div className="flex items-center gap-2">
                                 {doctorProfile.pdfPath && (
                                     <button
-                                        onClick={() => (window as any).ipcRenderer.openDocument(doctorProfile.pdfPath)}
+                                        onClick={() => window.ipcRenderer.openDocument(doctorProfile.pdfPath!)}
                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-navy/[0.04] text-navy/60 text-xs font-semibold hover:bg-navy/[0.08] hover:text-navy transition-all duration-200 cursor-pointer"
                                     >
                                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -838,7 +837,7 @@ export default function Prescriptions() {
 
                                     const handleViewPdf = async (localPath: string) => {
                                         try {
-                                            await (window as any).ipcRenderer.invoke('open-document', localPath);
+                                            await window.ipcRenderer.invoke('open-document', localPath);
                                         } catch (e) {
                                             console.error('Error opening PDF:', e);
                                         }

@@ -52,12 +52,12 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getAllPrescriptions: () => ipcRenderer.invoke('get-all-prescriptions'),
   updatePrescription: (prescription: Prescription) => ipcRenderer.invoke('update-prescription', prescription),
   deletePrescription: (id: number) => ipcRenderer.invoke('delete-prescription', id),
-  searchPrescription: (query: string) => ipcRenderer.invoke('search-prescription', query),
+  searchPrescription: (query: string) => ipcRenderer.invoke('search-prescriptions', query),
   countPrescriptions: () => ipcRenderer.invoke('count-prescriptions'),
 
   //gestion authentification
   createUser: (user: { fullName: string; password: string; role: string }) => ipcRenderer.invoke('create-user', user),
-  login: (phoneNumber: string, password: string, stayLogged: boolean) => ipcRenderer.invoke('login', phoneNumber, password, stayLogged),
+  login: (fullName: string, password: string, stayLogged: boolean) => ipcRenderer.invoke('login', fullName, password, stayLogged),
   checkAuth: () => ipcRenderer.invoke('check-auth'),
   logout: () => ipcRenderer.invoke('logout'),
 
@@ -65,7 +65,6 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   generatePatientPrescriptionPDF: (patientId: number, prescriptions: Prescription[], doctor: DoctorProfile, weight?: string) => ipcRenderer.invoke('generate-patient-prescription-pdf', patientId, prescriptions, doctor, weight),
 
   //gestion des rendez-vous
-  getAllAppointments: (doctorId: number, date: string) => ipcRenderer.invoke('get-all-appointments', doctorId, date),
   bookAppointment: (patientId: number, doctorId: number, datetime: string, duration?: number, reason?: string) => ipcRenderer.invoke('book-appointment', patientId, doctorId, datetime, duration, reason),
   cancelAppointment: (id: number) => ipcRenderer.invoke('cancel-appointment', id),
   deleteAppointment: (id: number) => ipcRenderer.invoke('delete-appointment', id),
@@ -79,4 +78,8 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   getAppointmentStatistics: (startDate: string, endDate: string, appointmentPrice: number) => ipcRenderer.invoke('get-appointment-statistics', startDate, endDate, appointmentPrice),
   getNoShowRate: (startDate: string, endDate: string) => ipcRenderer.invoke('get-noshow-rate', startDate, endDate),
   getConsultationVolume: (startDate: string, endDate: string) => ipcRenderer.invoke('get-consultation-volume', startDate, endDate),
+
+  //gestion de la licence / période d'essai
+  getTrialStatus: () => ipcRenderer.invoke('get-trial-status'),
+  activateLicense: (key: string) => ipcRenderer.invoke('activate-license', key),
 })
